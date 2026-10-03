@@ -295,7 +295,7 @@ export const mockTopCharts = [
     {
         id: 'chart-global-viral',
         title: 'Global Viral 50',
-        subtitle: 'Worldwide tracks catching fire on Groic',
+        subtitle: 'Worldwide tracks catching fire on VibeRoom',
         country: 'GL',
         coverUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80',
         songs: [mockSongs[3], mockSongs[2], mockSongs[1], mockSongs[5]],

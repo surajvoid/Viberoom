@@ -60,7 +60,7 @@ export const LibraryScreen: React.FC = () => {
       <section className="pt-2">
         <div className="flex items-center gap-2 text-xs font-mono tracking-widest text-emerald-400 uppercase">
           <Music size={14} />
-          <span>GROIC PERSONAL LIBRARY</span>
+          <span>PERSONAL LIBRARY</span>
         </div>
         <h1 className="text-3xl font-serif tracking-tight text-content-primary mt-1">
           Your Music & Uploads

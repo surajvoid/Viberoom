@@ -67,7 +67,7 @@ export const JoinRoomCodeModal: React.FC<JoinRoomCodeModalProps> = ({
         {/* Header */}
         <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-emerald-400 mb-1">
           <KeyRound size={14} />
-          <span>GROIC ROOM ACCESS</span>
+          <span>VIBEROOM ACCESS</span>
         </div>
         <h2 className="text-xl font-serif text-content-primary">
           Join with Room Code

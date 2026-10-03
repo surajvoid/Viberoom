@@ -273,7 +273,7 @@ export const fallbackTopCharts: TopChart[] = [
   {
     id: 'chart-global-viral',
     title: 'Global Viral 50',
-    subtitle: 'Worldwide tracks catching fire on Groic',
+    subtitle: 'Worldwide tracks catching fire on VibeRoom',
     country: 'GL',
     coverUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80',
     songs: [fallbackSongs[3], fallbackSongs[2], fallbackSongs[1], fallbackSongs[5]],

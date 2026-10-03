@@ -75,7 +75,7 @@ const MainAppContent: React.FC = () => {
       <div className="w-full max-w-md py-1.5 px-4 flex items-center justify-between text-[11px] font-mono text-content-muted border-b border-border-subtle/30 bg-surface-primary/60">
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          Groic v2.0 • Social Music
+          VibeRoom • Social Music
         </span>
         <button
           onClick={() => setIsMobileFrame(!isMobileFrame)}

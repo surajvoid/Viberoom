@@ -60,7 +60,7 @@ export const SongDedicationModal: React.FC = () => {
         {/* Header */}
         <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-rose-300 mb-1">
           <Heart size={14} className="fill-current" />
-          <span>GROIC SONG DEDICATION</span>
+          <span>SONG DEDICATION</span>
         </div>
         <h2 className="text-xl font-serif text-content-primary">
           Dedicate This Track
