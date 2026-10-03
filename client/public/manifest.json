@@ -1,0 +1,18 @@
+{
+  "name": "VibeRoom — Music is better together",
+  "short_name": "VibeRoom",
+  "description": "Mobile-first social music streaming & real-time listening lounge",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08090B",
+  "theme_color": "#08090B",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

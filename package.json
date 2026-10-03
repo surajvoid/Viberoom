@@ -1,0 +1,19 @@
+{
+  "name": "viberoom",
+  "version": "1.0.0",
+  "description": "VibeRoom — Music is better together. Mobile-first social music streaming & real-time listening platform.",
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix client",
+    "postinstall": "npm run install:all",
+    "build:client": "npm run build --prefix client",
+    "build:backend": "npm run build --prefix backend",
+    "build": "npm run install:all && npm run build:client && npm run build:backend",
+    "start": "node backend/dist/server.js",
+    "dev": "npm run dev --prefix backend",
+    "dev:client": "npm run dev --prefix client",
+    "test:sync": "npm run test:sync --prefix backend"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
