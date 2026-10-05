@@ -9,6 +9,7 @@ interface SongRowProps {
   playlistContext?: Song[];
   showCover?: boolean;
   onOpenRoomForSong?: (song: Song) => void;
+  searchContext?: string;
 }
 
 export const SongRow: React.FC<SongRowProps> = ({
@@ -17,6 +18,7 @@ export const SongRow: React.FC<SongRowProps> = ({
   playlistContext,
   showCover = false,
   onOpenRoomForSong,
+  searchContext,
 }) => {
   const { currentSong, isPlaying, playSong, togglePlayPause, likedSongs, toggleLike } = useAudio();
   const isCurrent = currentSong?.id === song.id;
@@ -36,7 +38,7 @@ export const SongRow: React.FC<SongRowProps> = ({
     if (isCurrent) {
       togglePlayPause();
     } else {
-      playSong(song, playlistContext);
+      playSong(song, playlistContext, undefined, searchContext);
     }
   };
 

@@ -42,6 +42,7 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenListenTo
     openDedicateModal,
     isVideoMode,
     toggleVideoMode,
+    isLoadingRelated,
   } = useAudio();
 
   const { activeRoom } = useSocket();
@@ -258,11 +259,21 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenListenTo
 
             <button
               onClick={next}
-              className="p-2 text-content-primary/80 hover:text-white transition-colors active:scale-95"
+              disabled={isLoadingRelated}
+              className={`p-2 text-content-primary/80 hover:text-white transition-colors active:scale-95 ${
+                isLoadingRelated ? 'opacity-40 animate-pulse' : ''
+              }`}
+              title={isLoadingRelated ? 'Finding related songs...' : 'Next track'}
             >
               <SkipForward size={26} className="fill-current" />
             </button>
           </div>
+
+          {isLoadingRelated && (
+            <div className="text-center text-[10px] font-mono text-emerald-400 animate-pulse py-0.5">
+              Finding related song on YouTube...
+            </div>
+          )}
 
           {/* Groic Dual CTAs: Listen Together & Dedicate */}
           <div className="grid grid-cols-2 gap-2 mt-1">

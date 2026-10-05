@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Song, SongDedication, RadioStation } from '../types/index.js';
-import { fallbackSongs, fallbackDedications } from '../services/api.js';
+import { api, fallbackSongs, fallbackDedications } from '../services/api.js';
 
 interface AudioContextType {
   currentSong: Song | null;
@@ -22,9 +22,11 @@ interface AudioContextType {
   isDedicateModalOpen: boolean;
   songToDedicate: Song | null;
   isVideoMode: boolean;
+  isLoadingRelated: boolean;
   toggleVideoMode: () => void;
   toggleLike: (songId: string) => void;
-  playSong: (song: Song, newQueue?: Song[], dedication?: SongDedication) => void;
+  playSong: (song: Song, newQueue?: Song[], dedication?: SongDedication, searchContext?: string) => void;
+  setSearchContext: (query: string) => void;
   togglePlayPause: () => void;
   seek: (seconds: number) => void;
   next: () => void;
@@ -53,14 +55,15 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [duration, setDuration] = useState(fallbackSongs[0].durationSec);
   const [volume, setVolumeState] = useState(0.85);
   const [isMuted, setIsMuted] = useState(false);
-  const [queue, setQueue] = useState<Song[]>(fallbackSongs);
-  const [likedSongs, setLikedSongs] = useState<Set<string>>(new Set(['song-apna-bana-le']));
+  const [queue, setQueue] = useState<Song[]>([fallbackSongs[0]]);
+  const [likedSongs, setLikedSongs] = useState<Set<string>>(new Set());
   const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
   const [isRoomOpen, setIsRoomOpen] = useState(false);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isVideoMode, setIsVideoMode] = useState(false);
+  const [isLoadingRelated, setIsLoadingRelated] = useState(false);
 
-  // Groic Features State
+  // VibeRoom Features State
   const [currentDedication, setCurrentDedication] = useState<SongDedication | null>(null);
   const [isRadioMode, setIsRadioMode] = useState(false);
   const [currentRadioStation, setCurrentRadioStation] = useState<RadioStation | null>(null);
@@ -73,6 +76,10 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const ytPlayerRef = useRef<any>(null);
   const ytReadyRef = useRef<boolean>(false);
   const pendingTrackRef = useRef<{ song: Song; queue?: Song[]; dedication?: SongDedication } | null>(null);
+
+  const lastSearchQueryRef = useRef<string>('');
+  const playedSongIdsRef = useRef<Set<string>>(new Set([fallbackSongs[0].youtubeId || fallbackSongs[0].id]));
+  const isLoadingRelatedRef = useRef<boolean>(false);
 
   // 1. Initialize HTML5 Audio Element for MP3s / Radio / Local uploads
   useEffect(() => {
@@ -120,7 +127,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const initYT = () => {
       if ((window as any).YT && (window as any).YT.Player && !ytPlayerRef.current) {
         try {
-          ytPlayerRef.current = new (window as any).YT.Player('groic-youtube-iframe', {
+          ytPlayerRef.current = new (window as any).YT.Player('viberoom-youtube-iframe', {
             height: '100%',
             width: '100%',
             videoId: currentSong?.youtubeId || 'UEvOsQBu1jY',
@@ -200,11 +207,67 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsVideoMode((prev) => !prev);
   };
 
-  const playSong = (song: Song, newQueue?: Song[], dedication?: SongDedication) => {
+  const setSearchContext = (query: string) => {
+    lastSearchQueryRef.current = query.trim();
+  };
+
+  const fetchRelatedSongs = async (baseSong: Song, explicitQuery?: string): Promise<Song[]> => {
+    let queryToSearch = '';
+    const activeSearch = explicitQuery || lastSearchQueryRef.current;
+    if (activeSearch && activeSearch.trim()) {
+      queryToSearch = `${activeSearch.trim()} songs`;
+    } else if (baseSong.artist && baseSong.artist !== 'YouTube Artist') {
+      const cleanArtist = baseSong.artist.split(/[,&x|]/)[0].trim();
+      queryToSearch = `${cleanArtist} songs`;
+    } else {
+      queryToSearch = `${baseSong.title} mix`;
+    }
+
+    try {
+      const results = await api.searchYouTube(queryToSearch);
+      if (results && results.length > 0) {
+        const existingKeys = new Set([
+          baseSong.id,
+          baseSong.youtubeId,
+          ...Array.from(playedSongIdsRef.current),
+          ...queue.map((q) => q.youtubeId || q.id),
+        ].filter(Boolean));
+
+        const freshResults = results.filter((s) => !existingKeys.has(s.youtubeId || s.id));
+        return freshResults.length > 0 ? freshResults : results.filter((s) => s.id !== baseSong.id);
+      }
+    } catch (e) {
+      console.warn('Could not fetch related songs from YouTube', e);
+    }
+    return [];
+  };
+
+  const playSong = (
+    song: Song,
+    newQueue?: Song[],
+    dedication?: SongDedication,
+    searchContext?: string
+  ) => {
     setIsRadioMode(false);
     setCurrentRadioStation(null);
     setCurrentSong(song);
-    if (newQueue) setQueue(newQueue);
+
+    if (searchContext && searchContext.trim()) {
+      lastSearchQueryRef.current = searchContext.trim();
+    }
+    playedSongIdsRef.current.add(song.youtubeId || song.id);
+
+    if (newQueue && newQueue.length > 0) {
+      setQueue(newQueue);
+    } else {
+      setQueue((prev) => {
+        if (prev.some((s) => s.id === song.id || (s.youtubeId && s.youtubeId === song.youtubeId))) {
+          return prev;
+        }
+        return [song, ...prev];
+      });
+    }
+
     setCurrentTime(0);
     setDuration(song.durationSec);
 
@@ -323,39 +386,84 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const next = () => {
+  const next = async () => {
     if (!currentSong) return;
 
+    // 1. Play next track from current queue if available
     if (queue.length > 0) {
-      const currentIndex = queue.findIndex((s) => s.id === currentSong.id);
+      const currentIndex = queue.findIndex(
+        (s) => s.id === currentSong.id || (s.youtubeId && s.youtubeId === currentSong.youtubeId)
+      );
       if (currentIndex !== -1 && currentIndex < queue.length - 1) {
-        playSong(queue[currentIndex + 1]);
+        const nextTrack = queue[currentIndex + 1];
+        playSong(nextTrack);
+
+        // Pre-fetch more related songs when approaching end of queue
+        if (currentIndex >= queue.length - 2 && !isLoadingRelatedRef.current) {
+          isLoadingRelatedRef.current = true;
+          fetchRelatedSongs(nextTrack)
+            .then((related) => {
+              isLoadingRelatedRef.current = false;
+              if (related.length > 0) {
+                setQueue((prev) => {
+                  const existingKeys = new Set(prev.map((p) => p.youtubeId || p.id));
+                  const fresh = related.filter((r) => !existingKeys.has(r.youtubeId || r.id));
+                  return [...prev, ...fresh];
+                });
+              }
+            })
+            .catch(() => {
+              isLoadingRelatedRef.current = false;
+            });
+        }
         return;
       }
     }
 
-    // Groic Continuous Autoplay: Find similar track to keep music going
-    if (continuousPlay) {
-      const pool = [...fallbackSongs, ...userUploadedSongs];
-      const nextCandidate =
-        pool.find((s) => s.genre === currentSong.genre && s.id !== currentSong.id) ||
-        pool[(pool.findIndex((s) => s.id === currentSong.id) + 1) % pool.length];
+    // 2. Queue ended or has only 1 track: DO NOT PLAY DEFAULT SONGS!
+    // Dynamically search and play related songs from YouTube based on search or artist!
+    if (isLoadingRelatedRef.current) return;
+    isLoadingRelatedRef.current = true;
+    setIsLoadingRelated(true);
 
-      if (nextCandidate) {
-        playSong(nextCandidate);
+    try {
+      const related = await fetchRelatedSongs(currentSong);
+      if (related.length > 0) {
+        const nextSong = related[0];
+        setQueue((prev) => {
+          const existingKeys = new Set(prev.map((p) => p.youtubeId || p.id));
+          const fresh = related.filter((r) => !existingKeys.has(r.youtubeId || r.id));
+          return [...prev, ...fresh];
+        });
+        playSong(nextSong);
+        return;
       }
+    } catch (err) {
+      console.warn('Error fetching related next song:', err);
+    } finally {
+      isLoadingRelatedRef.current = false;
+      setIsLoadingRelated(false);
+    }
+
+    // 3. Fallback: Loop to first song of current queue rather than playing default songs
+    if (queue.length > 0) {
+      playSong(queue[0]);
     }
   };
 
   const prev = () => {
-    if (!currentSong || queue.length === 0) return;
+    if (!currentSong) return;
     if (currentTime > 3) {
       seek(0);
       return;
     }
-    const currentIndex = queue.findIndex((s) => s.id === currentSong.id);
-    const prevIndex = (currentIndex - 1 + queue.length) % queue.length;
-    playSong(queue[prevIndex]);
+    if (queue.length > 0) {
+      const currentIndex = queue.findIndex(
+        (s) => s.id === currentSong.id || (s.youtubeId && s.youtubeId === currentSong.youtubeId)
+      );
+      const prevIndex = (currentIndex - 1 + queue.length) % queue.length;
+      playSong(queue[prevIndex]);
+    }
   };
 
   const setVolume = (val: number) => {
@@ -540,9 +648,11 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isDedicateModalOpen,
         songToDedicate,
         isVideoMode,
+        isLoadingRelated,
         toggleVideoMode,
         toggleLike,
         playSong,
+        setSearchContext,
         togglePlayPause,
         seek,
         next,
@@ -566,14 +676,14 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       {/* Docked YouTube Streamer Container (Audio-First or Video HD Mode) */}
       <div
-        id="groic-youtube-wrapper"
+        id="viberoom-youtube-wrapper"
         className={`transition-all duration-300 ${
           isVideoMode && isFullPlayerOpen && currentSong?.youtubeId
             ? 'fixed top-20 left-1/2 -translate-x-1/2 w-[90%] max-w-[360px] aspect-video rounded-2xl overflow-hidden shadow-2xl z-50 border border-white/20 bg-black pointer-events-auto'
             : 'fixed -bottom-[9999px] -left-[9999px] w-[240px] h-[180px] opacity-[0.001] pointer-events-none -z-50'
         }`}
       >
-        <div id="groic-youtube-iframe" className="w-full h-full" />
+        <div id="viberoom-youtube-iframe" className="w-full h-full" />
       </div>
     </AudioContext.Provider>
   );

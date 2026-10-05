@@ -153,8 +153,9 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onOpenRoom }) => {
                     index={idx}
                     showCover={true}
                     playlistContext={songs}
+                    searchContext={query}
                     onOpenRoomForSong={async (s) => {
-                      playSong(s);
+                      playSong(s, songs, undefined, query);
                       await joinRoom(`room-${s.id}`);
                       onOpenRoom(`room-${s.id}`);
                     }}
