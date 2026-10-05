@@ -188,24 +188,14 @@ export const searchCatalog = async (req: Request, res: Response) => {
   if (!q) {
     res.json({
       trendingGenres: ['HIP-HOP', 'BOLLYWOOD', 'R&B', 'LO-FI', 'ROCK', 'K-POP'],
-      songs: mockSongs.slice(0, 4),
-      rooms: roomManager.getAllRooms().slice(0, 2),
-      playlists: mockPlaylists.slice(0, 2),
-      radioStations: mockRadioStations,
+      songs: [],
+      rooms: roomManager.getAllRooms(),
+      playlists: [],
     });
     return;
   }
 
-  // 1. Local songs match
-  const localSongs = mockSongs.filter(
-    s =>
-      s.title.toLowerCase().includes(q) ||
-      s.artist.toLowerCase().includes(q) ||
-      s.album.toLowerCase().includes(q) ||
-      s.genre.toLowerCase().includes(q)
-  );
-
-  // 2. Real YouTube Search
+  // Real YouTube Search
   let ytSongs: Song[] = [];
   try {
     const searchResults = await (ytSearch as any)(q);
@@ -226,44 +216,17 @@ export const searchCatalog = async (req: Request, res: Response) => {
     console.warn('ytSearch catalog search notice:', err);
   }
 
-  // Combine and deduplicate
-  const seen = new Set<string>();
-  const combinedSongs: Song[] = [];
-  for (const s of [...localSongs, ...ytSongs]) {
-    const key = s.youtubeId || s.id;
-    if (!seen.has(key)) {
-      seen.add(key);
-      combinedSongs.push(s);
-    }
-  }
-
-  const playlists = mockPlaylists.filter(
-    p =>
-      p.title.toLowerCase().includes(q) ||
-      p.description.toLowerCase().includes(q)
-  );
-
   const rooms = roomManager
     .getAllRooms()
     .filter(
       r =>
         r.code.includes(q) ||
-        r.title.toLowerCase().includes(q) ||
-        r.currentSong.title.toLowerCase().includes(q) ||
-        r.currentSong.artist.toLowerCase().includes(q)
+        r.title.toLowerCase().includes(q)
     );
 
-  const radioStations = mockRadioStations.filter(
-    r =>
-      r.name.toLowerCase().includes(q) ||
-      r.frequency.toLowerCase().includes(q) ||
-      r.genre.toLowerCase().includes(q)
-  );
-
   res.json({
-    songs: combinedSongs,
-    playlists,
+    songs: ytSongs,
     rooms,
-    radioStations,
+    playlists: [],
   });
 };

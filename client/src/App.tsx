@@ -1,148 +1,164 @@
-import React, { useState, useEffect } from 'react';
-import { UserProvider, useUser } from './context/UserContext.js';
-import { AudioProvider, useAudio } from './context/AudioContext.js';
-import { SocketProvider, useSocket } from './context/SocketContext.js';
-import { Header } from './components/Header.js';
-import { BottomNavigation, TabType } from './components/BottomNavigation.js';
-import { MiniPlayer } from './components/MiniPlayer.js';
-import { FullPlayerModal } from './components/FullPlayerModal.js';
-import { ListeningRoomModal } from './components/ListeningRoomModal.js';
-import { MusicMatchModal } from './components/MusicMatchModal.js';
-import { JoinRoomCodeModal } from './components/JoinRoomCodeModal.js';
-import { SongDedicationModal } from './components/SongDedicationModal.js';
-import { UserOnboardingModal } from './components/UserOnboardingModal.js';
-import { HomeScreen } from './screens/HomeScreen.js';
-import { SearchScreen } from './screens/SearchScreen.js';
-import { LibraryScreen } from './screens/LibraryScreen.js';
-import { FriendsScreen } from './screens/FriendsScreen.js';
-import { api } from './services/api.js';
-import { MusicMatchData } from './types/index.js';
-import { Smartphone, Monitor } from 'lucide-react';
+import React, { useState } from 'react';
+import { ThemeProvider } from './context/ThemeContext.js';
+import { AuthProvider, useAuth } from './context/AuthContext.js';
+import { PlayerProvider } from './context/PlayerContext.js';
+import { RoomProvider } from './context/RoomContext.js';
+import { AuthScreen } from './screens/auth/AuthScreen.js';
+import { BottomNavigation, NavigationTab } from './components/navigation/BottomNavigation.js';
+import { DesktopSidebar } from './components/navigation/DesktopSidebar.js';
+import { AppHeader } from './components/navigation/AppHeader.js';
+import { MiniPlayer } from './components/player/MiniPlayer.js';
+import { NowPlayingModal } from './components/player/NowPlayingModal.js';
+import { PrivateRoomModal } from './components/room/PrivateRoomModal.js';
+import { CreateRoomModal } from './components/room/CreateRoomModal.js';
+import { JoinRoomCodeModal } from './components/room/JoinRoomCodeModal.js';
+import { SessionSummaryModal } from './components/room/SessionSummaryModal.js';
+import { FriendsActivityModal } from './components/social/FriendsActivityModal.js';
+import { HomeScreen } from './screens/foundation/HomeScreen.js';
+import { DiscoverScreen } from './screens/foundation/DiscoverScreen.js';
+import { RoomsScreen } from './screens/foundation/RoomsScreen.js';
+import { LibraryScreen } from './screens/foundation/LibraryScreen.js';
+import { ProfileScreen } from './screens/foundation/ProfileScreen.js';
+import { Smartphone, Monitor, Volume2 } from 'lucide-react';
 
-const MainAppContent: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<TabType>('home');
-  const [isMobileFrame, setIsMobileFrame] = useState(false);
-  const [musicMatchData, setMusicMatchData] = useState<MusicMatchData | null>(null);
-  const [showMatchModal, setShowMatchModal] = useState(false);
-  const [isJoinCodeModalOpen, setIsJoinCodeModalOpen] = useState(false);
+const ShellLayout: React.FC = () => {
+  const { currentUser, isAuthenticated, isLoading } = useAuth();
+  const [currentTab, setCurrentTab] = useState<NavigationTab>('home');
+  const [isMobileFramePreview, setIsMobileFramePreview] = useState(false);
+  const [isFriendsActivityOpen, setIsFriendsActivityOpen] = useState(false);
 
-  const { currentUser } = useUser();
-  const { isRoomOpen, openRoom, closeRoom } = useAudio();
-  const { activeRoom, joinRoom } = useSocket();
+  // Loading state while checking persistent session
+  if (isLoading) {
+    return (
+      <div className="min-h-screen w-full bg-app-bg text-app-text flex flex-col items-center justify-center select-none">
+        <div className="w-14 h-14 rounded-hero bg-app-accent flex items-center justify-center shadow-accent-glow text-white animate-pulse">
+          <Volume2 size={26} strokeWidth={2.5} />
+        </div>
+        <div className="mt-5 text-center space-y-1">
+          <p className="font-extrabold text-[20px] text-app-text tracking-tight">
+            Vibe<span className="text-app-accent">Room</span>
+          </p>
+          <p className="text-meta text-app-muted">Preparing synchronized soundscapes...</p>
+        </div>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    api.getMusicMatch(currentUser.id, 'user-community-2').then(setMusicMatchData);
-  }, [currentUser.id]);
+  // Authentication gating: NEVER show default logged-in user or go directly to Home
+  if (!isAuthenticated || !currentUser) {
+    return <AuthScreen />;
+  }
 
-  const handleOpenRoom = (roomId: string) => {
-    openRoom(roomId);
-  };
-
-  const handleOpenMusicMatch = () => {
-    setShowMatchModal(true);
-  };
-
-  const renderScreen = () => {
+  const renderActiveTabContent = () => {
     switch (currentTab) {
       case 'home':
         return (
           <HomeScreen
-            onOpenRoom={handleOpenRoom}
-            onOpenMusicMatch={handleOpenMusicMatch}
-            onOpenJoinCodeModal={() => setIsJoinCodeModalOpen(true)}
+            onOpenRoom={() => setCurrentTab('rooms')}
+            onNavigateTab={setCurrentTab}
           />
         );
-      case 'search':
-        return <SearchScreen onOpenRoom={handleOpenRoom} />;
+      case 'discover':
+        return <DiscoverScreen />;
+      case 'rooms':
+        return <RoomsScreen />;
       case 'library':
         return <LibraryScreen />;
-      case 'friends':
-        return <FriendsScreen onOpenRoom={handleOpenRoom} onOpenMusicMatch={handleOpenMusicMatch} />;
+      case 'profile':
+        return <ProfileScreen />;
       default:
         return (
           <HomeScreen
-            onOpenRoom={handleOpenRoom}
-            onOpenMusicMatch={handleOpenMusicMatch}
-            onOpenJoinCodeModal={() => setIsJoinCodeModalOpen(true)}
+            onOpenRoom={() => setCurrentTab('rooms')}
+            onNavigateTab={setCurrentTab}
           />
         );
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#050607] flex flex-col items-center justify-start text-content-primary">
-      {/* Viewport Frame Toggle Bar for Desktop Preview */}
-      <div className="w-full max-w-md py-1.5 px-4 flex items-center justify-between text-[11px] font-mono text-content-muted border-b border-border-subtle/30 bg-surface-primary/60">
-        <span className="flex items-center gap-1.5">
+    <div className="min-h-screen bg-app-bg text-app-text flex flex-col items-center justify-start transition-colors duration-200">
+      {/* Dev / Desktop Viewport Frame Toggle Bar */}
+      <div className="w-full bg-app-surface/90 border-b border-app-border py-1 px-4 hidden md:flex items-center justify-between text-meta-sm font-mono text-app-muted z-50">
+        <span className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          VibeRoom • Social Music
+          <span>VibeRoom • Premium Social Music</span>
         </span>
-        <button
-          onClick={() => setIsMobileFrame(!isMobileFrame)}
-          className="flex items-center gap-1 text-content-secondary hover:text-content-primary py-0.5 px-2 rounded hover:bg-surface-secondary transition-colors"
-        >
-          {isMobileFrame ? <Monitor size={12} /> : <Smartphone size={12} />}
-          <span>{isMobileFrame ? 'Expand' : 'Mobile Frame'}</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="text-meta-sm text-app-muted">Preview:</span>
+          <button
+            onClick={() => setIsMobileFramePreview(!isMobileFramePreview)}
+            className="flex items-center gap-1.5 text-app-text hover:text-app-accent px-2.5 py-0.5 rounded-chip bg-app-elevated border border-app-border transition-colors"
+          >
+            {isMobileFramePreview ? <Monitor size={13} /> : <Smartphone size={13} />}
+            <span>{isMobileFramePreview ? 'Desktop View' : 'Phone Frame (390px)'}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Main Mobile App Container */}
+      {/* Main Responsive Container */}
       <div
-        className={`w-full relative flex flex-col transition-all duration-300 ${
-          isMobileFrame
-            ? 'max-w-[420px] my-4 rounded-[40px] border-[8px] border-[#1C1D21] shadow-2xl overflow-hidden min-h-[850px] max-h-[90vh]'
-            : 'max-w-md min-h-screen bg-background border-x border-border-subtle/40 shadow-2xl'
+        className={`w-full flex-1 flex transition-all duration-300 ${
+          isMobileFramePreview
+            ? 'max-w-[420px] my-6 rounded-[36px] border-[10px] border-app-surface shadow-2xl overflow-hidden min-h-[820px] max-h-[92vh] flex-col relative'
+            : 'max-w-7xl mx-auto h-screen overflow-hidden'
         }`}
       >
-        {/* Editorial Top Header */}
-        <Header />
-
-        {/* Active Tab Screen */}
-        <main className="flex-1 overflow-y-auto scrollbar-none">{renderScreen()}</main>
-
-        {/* Floating Mini Player (docked above bottom navigation) */}
-        <MiniPlayer />
-
-        {/* Bottom Navigation */}
-        <BottomNavigation currentTab={currentTab} onSelectTab={setCurrentTab} />
-
-        {/* Full Cinematic Player Modal */}
-        <FullPlayerModal
-          onOpenListenTogether={async () => {
-            await joinRoom('8492');
-            openRoom('8492');
-          }}
-        />
-
-        {/* Real-Time Listening Room Modal */}
-        {(isRoomOpen || activeRoom) && (
-          <ListeningRoomModal onClose={closeRoom} />
-        )}
-
-        {/* Couple / Music Match Modal */}
-        {showMatchModal && musicMatchData && (
-          <MusicMatchModal
-            data={musicMatchData}
-            onClose={() => setShowMatchModal(false)}
-            onListenTogether={async () => {
-              await joinRoom('8492');
-              openRoom('8492');
-            }}
+        {/* Desktop Sidebar (hidden on phone preview or mobile viewports) */}
+        {!isMobileFramePreview && (
+          <DesktopSidebar
+            currentTab={currentTab}
+            onSelectTab={setCurrentTab}
+            onOpenFriends={() => setIsFriendsActivityOpen(true)}
+            className="hidden md:flex"
           />
         )}
 
-        {/* Groic 1-Tap Room Code Modal */}
-        <JoinRoomCodeModal
-          isOpen={isJoinCodeModalOpen}
-          onClose={() => setIsJoinCodeModalOpen(false)}
-          onJoined={(code) => openRoom(code)}
-        />
+        {/* Central Viewport */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+          {/* Editorial Top Header */}
+          <AppHeader
+            currentTab={currentTab}
+            onNavigateTab={setCurrentTab}
+            onOpenSearch={() => setCurrentTab('discover')}
+            onOpenFriends={() => setIsFriendsActivityOpen(true)}
+          />
 
-        {/* Groic Song Dedication Modal */}
-        <SongDedicationModal />
+          {/* Scrollable Screen Body */}
+          <main className="flex-1 overflow-y-auto px-mobile-pad md:px-desktop-pad py-5 scrollbar-none">
+            {renderActiveTabContent()}
+          </main>
 
-        {/* User Identity & Onboarding Modal */}
-        <UserOnboardingModal />
+          {/* Floating Mini Player */}
+          <MiniPlayer />
+
+          {/* Cinematic Now Playing Full Screen Modal */}
+          <NowPlayingModal onStartRoom={() => setCurrentTab('rooms')} />
+
+          {/* Real-Time Private Social Room Full Screen Modal */}
+          <PrivateRoomModal />
+
+          {/* Room Modals */}
+          <CreateRoomModal />
+          <JoinRoomCodeModal />
+          <SessionSummaryModal />
+
+          {/* Friend Activity Modal */}
+          <FriendsActivityModal
+            isOpen={isFriendsActivityOpen}
+            onClose={() => setIsFriendsActivityOpen(false)}
+          />
+
+          {/* Mobile Bottom Navigation (Visible on mobile or when mobile frame preview is toggled) */}
+          {(isMobileFramePreview || true) && (
+            <div className={isMobileFramePreview ? 'block' : 'block md:hidden'}>
+              <BottomNavigation
+                currentTab={currentTab}
+                onSelectTab={setCurrentTab}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -150,13 +166,15 @@ const MainAppContent: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <UserProvider>
-      <AudioProvider>
-        <SocketProvider>
-          <MainAppContent />
-        </SocketProvider>
-      </AudioProvider>
-    </UserProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <PlayerProvider>
+          <RoomProvider>
+            <ShellLayout />
+          </RoomProvider>
+        </PlayerProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 };
 

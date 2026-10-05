@@ -8,41 +8,54 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#08090B',
-        surface: {
-          primary: '#111214',
-          secondary: '#18191B',
-          tertiary: '#202226',
+        app: {
+          bg: 'var(--app-bg)',
+          surface: 'var(--app-surface)',
+          elevated: 'var(--app-elevated)',
+          text: 'var(--app-text)',
+          muted: 'var(--app-text-muted)',
+          border: 'var(--app-border)',
+          'border-strong': 'var(--app-border-strong)',
+          glass: 'var(--app-glass)',
+          accent: 'var(--app-accent)',
         },
-        content: {
-          primary: '#F5F5F3',
-          secondary: '#9A9A9A',
-          muted: '#666666',
+        accent: {
+          pink: '#FF3D81',
+          purple: '#8B5CF6',
+          lime: '#B6F23A',
+          cyan: '#22D3EE',
+          coral: '#FF6B5A',
         },
-        border: {
-          subtle: '#242424',
-          highlight: '#383838',
-        }
       },
       fontFamily: {
-        serif: ['"DM Serif Display"', '"Instrument Serif"', 'serif'],
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
-      keyframes: {
-        'float-up': {
-          '0%': { transform: 'translateY(0) scale(0.6)', opacity: '0' },
-          '15%': { transform: 'translateY(-20px) scale(1.1)', opacity: '1' },
-          '80%': { transform: 'translateY(-130px) scale(1)', opacity: '0.9' },
-          '100%': { transform: 'translateY(-180px) scale(0.8)', opacity: '0' },
-        },
-        'pulse-subtle': {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.6' },
-        },
+      fontSize: {
+        'page-title': ['32px', { lineHeight: '38px', fontWeight: '700' }],
+        'section-heading': ['20px', { lineHeight: '26px', fontWeight: '700' }],
+        'body': ['15px', { lineHeight: '22px', fontWeight: '500' }],
+        'meta': ['13px', { lineHeight: '18px', fontWeight: '500' }],
+        'meta-sm': ['12px', { lineHeight: '16px', fontWeight: '500' }],
       },
-      animation: {
-        'float-up': 'float-up 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards',
-        'pulse-subtle': 'pulse-subtle 2s infinite ease-in-out',
+      borderRadius: {
+        'chip': '12px',
+        'card': '20px',
+        'hero': '28px',
+      },
+      spacing: {
+        'mobile-pad': '20px',
+        'desktop-pad': '32px',
+      },
+      boxShadow: {
+        'soft-1': '0 4px 20px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04)',
+        'soft-2': '0 12px 36px -4px rgba(0, 0, 0, 0.16), 0 4px 12px -2px rgba(0, 0, 0, 0.08)',
+        'accent-glow': '0 8px 30px -4px var(--app-accent-glow)',
+      },
+      backdropBlur: {
+        'glass': '24px',
+      },
+      transitionTimingFunction: {
+        'spring': 'cubic-bezier(0.175, 0.885, 0.32, 1.15)',
       },
     },
   },
