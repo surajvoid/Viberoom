@@ -33,7 +33,7 @@ export const LibraryScreen: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6 pb-36 select-none">
+    <div className="space-y-6 pb-36">
       {/* Header & Local Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>

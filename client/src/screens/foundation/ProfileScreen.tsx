@@ -52,7 +52,7 @@ export const ProfileScreen: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 pb-36 select-none max-w-4xl mx-auto">
+    <div className="space-y-6 pb-36 max-w-4xl mx-auto">
       {/* Profile Header Hero */}
       <div className="relative rounded-hero overflow-hidden bg-gradient-to-br from-app-surface via-app-elevated to-app-surface border border-app-border p-5 sm:p-7 shadow-soft-1">
         <div className="flex flex-col sm:flex-row items-center gap-5">

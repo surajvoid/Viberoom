@@ -12,7 +12,7 @@ export const RoomsScreen: React.FC = () => {
   const { roomsList, joinRoom, setIsCreateModalOpen, setIsJoinModalOpen } = useRoom();
 
   return (
-    <div className="space-y-8 pb-36 select-none">
+    <div className="space-y-8 pb-36">
       {/* Banner / Header Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-hero bg-gradient-to-r from-app-surface via-app-elevated to-app-surface border border-app-border">
         <div>

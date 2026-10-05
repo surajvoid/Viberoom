@@ -58,7 +58,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenRoom, onNavigateTa
   };
 
   return (
-    <div className="space-y-8 pb-32 select-none">
+    <div className="space-y-8 pb-36">
       {/* Editorial Welcome Header */}
       <div className="flex items-center justify-between">
         <div>

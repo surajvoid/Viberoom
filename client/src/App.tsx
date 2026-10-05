@@ -115,7 +115,7 @@ const ShellLayout: React.FC = () => {
         )}
 
         {/* Central Viewport */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+        <div className="flex-1 flex flex-col h-full overflow-hidden relative touch-pan-y">
           {/* Editorial Top Header */}
           <AppHeader
             currentTab={currentTab}
@@ -124,8 +124,15 @@ const ShellLayout: React.FC = () => {
             onOpenFriends={() => setIsFriendsActivityOpen(true)}
           />
 
-          {/* Scrollable Screen Body */}
-          <main className="flex-1 overflow-y-auto px-mobile-pad md:px-desktop-pad py-5 scrollbar-none overscroll-contain">
+          {/* Scrollable Screen Body (1-Finger Smooth Mobile Scroll) */}
+          <main
+            id="app-main-scroller"
+            className="flex-1 overflow-y-auto px-mobile-pad md:px-desktop-pad py-5 scrollbar-none touch-pan-y"
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-y',
+            }}
+          >
             {renderActiveTabContent()}
           </main>
 
