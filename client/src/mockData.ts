@@ -26,6 +26,7 @@ export interface Track {
   lyrics: LyricLine[];
   youtubeId?: string;
   coverUrl?: string;
+  audioUrl?: string;
 }
 
 export interface Artist {

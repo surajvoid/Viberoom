@@ -68,7 +68,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
                 className="relative"
               >
                 <Icon
-                  size={22}
+                  size={20}
                   strokeWidth={isActive ? 2.4 : 1.8}
                   className={`transition-colors duration-200 ${
                     isActive
@@ -87,7 +87,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
               {/* Label */}
               <span
-                className={`text-[11px] font-medium tracking-tight mt-1 transition-colors duration-200 ${
+                className={`text-[10px] font-medium tracking-tight mt-0.5 transition-colors duration-200 ${
                   isActive
                     ? 'text-app-accent font-semibold'
                     : 'text-app-muted group-hover:text-app-text'

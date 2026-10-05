@@ -108,6 +108,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Background audio & system media controls refs
   const bgAudioRef = useRef<HTMLAudioElement | null>(null);
+  const nativeAudioRef = useRef<HTMLAudioElement | null>(null);
   const resumeRef = useRef<() => void>(() => {});
   const pauseRef = useRef<() => void>(() => {});
   const nextTrackRef = useRef<() => void>(() => {});
@@ -125,6 +126,24 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
 
+  // Native HTML5 Audio element instance for direct audioUrl tracks (never suspended on mobile screen off)
+  const getNativeAudio = (): HTMLAudioElement | null => {
+    if (typeof document === 'undefined') return null;
+    if (!nativeAudioRef.current) {
+      let audio = document.getElementById('viberoom-native-audio') as HTMLAudioElement;
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = 'viberoom-native-audio';
+        audio.preload = 'auto';
+        audio.setAttribute('playsinline', 'true');
+        audio.setAttribute('webkit-playsinline', 'true');
+        document.body.appendChild(audio);
+      }
+      nativeAudioRef.current = audio;
+    }
+    return nativeAudioRef.current;
+  };
+
   // Ensures continuous background audio carrier is active to prevent mobile sleep/tab throttling
   const ensureAudioCarrier = (play: boolean) => {
     if (typeof document === 'undefined') return;
@@ -138,7 +157,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           audio.preload = 'auto';
           audio.setAttribute('playsinline', 'true');
           audio.setAttribute('webkit-playsinline', 'true');
-          audio.volume = 0.001; // Tiny inaudible output keeps OS audio mixer engaged
           audio.src = createSilentAudioBlob();
           document.body.appendChild(audio);
         }
@@ -148,7 +166,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (bgAudioRef.current) {
         if (play) {
           bgAudioRef.current.loop = true;
-          bgAudioRef.current.volume = 0.001;
           const p = bgAudioRef.current.play();
           if (p && typeof p.then === 'function') {
             p.catch(() => {});
@@ -229,17 +246,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!document.getElementById('viberoom-yt-container')) {
       const container = document.createElement('div');
       container.id = 'viberoom-yt-container';
-      // Critical for Mobile Browsers: Must NOT be -9999px or 1x1px opacity:0!
-      // Mobile Safari and Chrome cull off-screen geometry and stop video on sleep/tab-switch.
+      // Critical for Mobile Browsers: Must NOT have 0 opacity or -1000 zIndex!
+      // Mobile Safari and Chrome cull invisible/off-screen layers and terminate audio streams.
       container.style.position = 'fixed';
       container.style.bottom = '0px';
       container.style.right = '0px';
-      container.style.width = '200px';
-      container.style.height = '200px';
-      container.style.opacity = '0.001';
+      container.style.width = '1px';
+      container.style.height = '1px';
+      container.style.opacity = '1';
+      container.style.overflow = 'hidden';
       container.style.pointerEvents = 'none';
-      container.style.zIndex = '-1000';
-      container.style.transform = 'translate3d(0, 0, 0)';
+      container.style.zIndex = '10';
+      container.style.transform = 'translateZ(0)';
 
       const iframeSlot = document.createElement('div');
       iframeSlot.id = 'viberoom-yt-iframe-slot';
@@ -279,17 +297,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                   setIsPlaying(true);
                   ensureAudioCarrier(true);
                 } else if (event.data === 2) {
-                  // If phone screen locked or tab switched (visibilityState === 'hidden'),
-                  // this pause was forced by OS power management, NOT user intent!
+                  // If phone screen locked or tab switched (visibilityState === 'hidden')
                   if (document.visibilityState === 'hidden' && isPlayingRef.current) {
                     ensureAudioCarrier(true);
-                    setTimeout(() => {
-                      if (isPlayingRef.current && ytPlayerRef.current) {
-                        try {
-                          ytPlayerRef.current.playVideo();
-                        } catch (e) {}
-                      }
-                    }, 150);
+                    try {
+                      ytPlayerRef.current?.playVideo();
+                    } catch (e) {}
+
+                    // Cleanly update lock-screen playbackState to paused so the Lock Screen
+                    // and Control Center display the [▶ Play] button!
+                    // When the user taps Play or headphone button, MediaSession onPlay handler
+                    // executes as a trusted user action and resumes playback with screen locked.
+                    setIsPlaying(false);
+                    if ('mediaSession' in navigator) {
+                      try {
+                        navigator.mediaSession.playbackState = 'paused';
+                      } catch (e) {}
+                    }
                     return;
                   }
                   setIsPlaying(false);
@@ -318,6 +342,57 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, []);
 
+  // Attach native HTML5 audio listeners for direct audio stream background playback
+  useEffect(() => {
+    const audio = getNativeAudio();
+    if (!audio) return;
+
+    const handleTimeUpdate = () => {
+      if (currentTrackRef.current?.audioUrl) {
+        setCurrentTime(audio.currentTime);
+        if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+          setDuration(audio.duration);
+        }
+      }
+    };
+
+    const handleEnded = () => {
+      if (currentTrackRef.current?.audioUrl) {
+        handleTrackEndRef.current?.();
+      }
+    };
+
+    const handlePlay = () => {
+      if (currentTrackRef.current?.audioUrl) {
+        setIsPlaying(true);
+        ensureAudioCarrier(true);
+      }
+    };
+
+    const handlePause = () => {
+      if (currentTrackRef.current?.audioUrl && isPlayingRef.current) {
+        if (document.visibilityState === 'hidden') {
+          audio.play().catch(() => {});
+        } else {
+          setIsPlaying(false);
+          ensureAudioCarrier(false);
+        }
+      }
+    };
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+    };
+  }, []);
+
   // Continuous background audio & screen lock watchdog
   // Keeps music playing smoothly when user locks phone or switches tabs/apps
   useEffect(() => {
@@ -329,22 +404,32 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Phone screen off, sleep mode, or user switched apps/tabs
         if (isPlayingRef.current) {
           ensureAudioCarrier(true);
-          // If browser momentarily paused video upon backgrounding, auto-resume immediately
+          // If browser momentarily paused playback upon backgrounding, auto-resume immediately
           setTimeout(() => {
-            if (isPlayingRef.current && ytPlayerRef.current) {
-              try {
-                const state = ytPlayerRef.current.getPlayerState?.();
-                if (state === 2) {
-                  ytPlayerRef.current.playVideo();
+            if (isPlayingRef.current) {
+              if (currentTrackRef.current?.audioUrl && nativeAudioRef.current) {
+                if (nativeAudioRef.current.paused) {
+                  nativeAudioRef.current.play().catch(() => {});
                 }
-              } catch (e) {}
+              } else if (ytPlayerRef.current) {
+                try {
+                  const state = ytPlayerRef.current.getPlayerState?.();
+                  if (state === 2) {
+                    ytPlayerRef.current.playVideo();
+                  }
+                } catch (e) {}
+              }
             }
           }, 150);
         }
       } else {
         // Returned to foreground / screen turned back on
         if (isPlayingRef.current) {
-          if (ytPlayerRef.current) {
+          if (currentTrackRef.current?.audioUrl && nativeAudioRef.current) {
+            if (nativeAudioRef.current.paused) {
+              nativeAudioRef.current.play().catch(() => {});
+            }
+          } else if (ytPlayerRef.current) {
             try {
               const state = ytPlayerRef.current.getPlayerState?.();
               if (state !== 1) {
@@ -542,7 +627,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .slice(0, 6);
         setQueue(remaining);
 
-        if (candidate.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+        if (candidate.audioUrl) {
+          const audio = getNativeAudio();
+          if (audio) {
+            audio.src = candidate.audioUrl;
+            audio.currentTime = 0;
+            audio.volume = isMuted ? 0 : volume;
+            audio.play().catch(() => {});
+          }
+          if (ytReadyRef.current && ytPlayerRef.current) {
+            try {
+              ytPlayerRef.current.pauseVideo();
+            } catch (e) {}
+          }
+        } else if (candidate.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+          if (nativeAudioRef.current) {
+            nativeAudioRef.current.pause();
+          }
           try {
             ytPlayerRef.current.loadVideoById(candidate.youtubeId);
             ytPlayerRef.current.playVideo();
@@ -569,7 +670,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ensureAudioCarrier(true);
       setCurrentTime(0);
       setIsPlaying(true);
-      if (current.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+      if (current.audioUrl && nativeAudioRef.current) {
+        nativeAudioRef.current.currentTime = 0;
+        nativeAudioRef.current.play().catch(() => {});
+      } else if (current.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.seekTo(0, true);
           ytPlayerRef.current.playVideo();
@@ -590,7 +694,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCurrentTime(0);
       setIsPlaying(true);
 
-      if (next.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+      if (next.audioUrl) {
+        const audio = getNativeAudio();
+        if (audio) {
+          audio.src = next.audioUrl;
+          audio.currentTime = 0;
+          audio.volume = isMuted ? 0 : volume;
+          audio.play().catch(() => {});
+        }
+        if (ytReadyRef.current && ytPlayerRef.current) {
+          try {
+            ytPlayerRef.current.pauseVideo();
+          } catch (e) {}
+        }
+      } else if (next.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+        if (nativeAudioRef.current) {
+          nativeAudioRef.current.pause();
+        }
         try {
           ytPlayerRef.current.loadVideoById(next.youtubeId);
           ytPlayerRef.current.playVideo();
@@ -611,6 +731,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsPlaying(false);
       ensureAudioCarrier(false);
       setCurrentTime(0);
+      if (nativeAudioRef.current) {
+        nativeAudioRef.current.pause();
+      }
       if (ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.pauseVideo();
@@ -634,7 +757,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCurrentTime(0);
       setQueue((prev) => prev.filter((t) => t.id !== track.id));
 
-      if (track.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+      if (track.audioUrl) {
+        const audio = getNativeAudio();
+        if (audio) {
+          audio.src = track.audioUrl;
+          audio.currentTime = 0;
+          audio.volume = isMuted ? 0 : volume;
+          audio.play().catch(() => {});
+        }
+        if (ytReadyRef.current && ytPlayerRef.current) {
+          try {
+            ytPlayerRef.current.pauseVideo();
+          } catch (e) {}
+        }
+      } else if (track.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+        if (nativeAudioRef.current) {
+          nativeAudioRef.current.pause();
+        }
         try {
           ytPlayerRef.current.loadVideoById(track.youtubeId);
           ytPlayerRef.current.playVideo();
@@ -644,7 +783,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Proactively fetch and queue similar tracks for seamless continuous playback
       prefetchSimilarTracks(track);
     } else {
-      if (track.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+      if (track.audioUrl && nativeAudioRef.current) {
+        nativeAudioRef.current.play().catch(() => {});
+      } else if (track.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.playVideo();
         } catch (e) {}
@@ -658,7 +799,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setIsPlaying((prev) => {
       const nextState = !prev;
       ensureAudioCarrier(nextState);
-      if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+      if (currentTrack.audioUrl) {
+        const audio = getNativeAudio();
+        if (nextState) {
+          audio?.play().catch(() => {});
+        } else {
+          audio?.pause();
+        }
+      } else if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           if (nextState) {
             ytPlayerRef.current.playVideo();
@@ -675,6 +823,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentTrack) return;
     setIsPlaying(false);
     ensureAudioCarrier(false);
+    if (nativeAudioRef.current) {
+      nativeAudioRef.current.pause();
+    }
     if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
       try {
         ytPlayerRef.current.pauseVideo();
@@ -686,7 +837,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentTrack) return;
     setIsPlaying(true);
     ensureAudioCarrier(true);
-    if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+    if (currentTrack.audioUrl) {
+      const audio = getNativeAudio();
+      audio?.play().catch(() => {});
+    } else if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
       try {
         ytPlayerRef.current.playVideo();
       } catch (e) {}
@@ -699,7 +853,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const targetSeconds = clamped * duration;
     setCurrentTime(targetSeconds);
 
-    if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+    if (currentTrack.audioUrl && nativeAudioRef.current) {
+      nativeAudioRef.current.currentTime = targetSeconds;
+    } else if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
       try {
         ytPlayerRef.current.seekTo(targetSeconds, true);
       } catch (e) {}
@@ -716,7 +872,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     ensureAudioCarrier(true);
     if (currentTime > 3 || history.length === 0) {
       setCurrentTime(0);
-      if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+      if (currentTrack.audioUrl && nativeAudioRef.current) {
+        nativeAudioRef.current.currentTime = 0;
+        nativeAudioRef.current.play().catch(() => {});
+      } else if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.seekTo(0, true);
         } catch (e) {}
@@ -730,7 +889,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCurrentTime(0);
       setIsPlaying(true);
 
-      if (prev.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+      if (prev.audioUrl) {
+        const audio = getNativeAudio();
+        if (audio) {
+          audio.src = prev.audioUrl;
+          audio.currentTime = 0;
+          audio.volume = isMuted ? 0 : volume;
+          audio.play().catch(() => {});
+        }
+        if (ytReadyRef.current && ytPlayerRef.current) {
+          try {
+            ytPlayerRef.current.pauseVideo();
+          } catch (e) {}
+        }
+      } else if (prev.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+        if (nativeAudioRef.current) {
+          nativeAudioRef.current.pause();
+        }
         try {
           ytPlayerRef.current.loadVideoById(prev.youtubeId);
           ytPlayerRef.current.playVideo();
@@ -767,6 +942,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const clamped = Math.max(0, Math.min(1, vol));
     setVolumeState(clamped);
     if (clamped > 0 && isMuted) setIsMuted(false);
+    if (nativeAudioRef.current) {
+      nativeAudioRef.current.volume = clamped;
+    }
     if (ytReadyRef.current && ytPlayerRef.current) {
       try {
         ytPlayerRef.current.setVolume(clamped * 100);
@@ -777,6 +955,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const toggleMute = () => {
     setIsMuted((prev) => {
       const next = !prev;
+      if (nativeAudioRef.current) {
+        nativeAudioRef.current.muted = next;
+      }
       if (ytReadyRef.current && ytPlayerRef.current) {
         try {
           if (next) {

@@ -226,21 +226,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenRoom, onNavigateTa
           <span className="text-meta-sm text-app-muted">Instant social controls</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
           <Card
             interactive={true}
             onClick={() => setIsCreateModalOpen(true)}
-            className="p-5 flex flex-col justify-between space-y-3 group hover:border-app-accent transition-colors"
+            className="p-3 sm:p-4 flex flex-col items-center sm:items-start text-center sm:text-left justify-between space-y-2 group hover:border-app-accent transition-colors"
           >
-            <div className="w-10 h-10 rounded-chip bg-app-accent/15 text-app-accent flex items-center justify-center">
-              <Plus size={20} />
+            <div className="w-8 h-8 rounded-chip bg-app-accent/15 text-app-accent flex items-center justify-center shrink-0">
+              <Plus size={16} />
             </div>
-            <div>
-              <h4 className="text-body font-bold text-app-text group-hover:text-app-accent transition-colors">
-                Launch Private Room
+            <div className="min-w-0 w-full">
+              <h4 className="text-caption sm:text-body-sm font-bold text-app-text group-hover:text-app-accent transition-colors truncate">
+                New Room
               </h4>
-              <p className="text-meta-sm text-app-muted mt-0.5">
-                Host a sync session with queue voting & reactions.
+              <p className="text-[10px] sm:text-meta-sm text-app-muted mt-0.5 hidden sm:block truncate">
+                Host a sync session
               </p>
             </div>
           </Card>
@@ -248,17 +248,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenRoom, onNavigateTa
           <Card
             interactive={true}
             onClick={() => setIsJoinModalOpen(true)}
-            className="p-5 flex flex-col justify-between space-y-3 group hover:border-[#8B5CF6] transition-colors"
+            className="p-3 sm:p-4 flex flex-col items-center sm:items-start text-center sm:text-left justify-between space-y-2 group hover:border-[#8B5CF6] transition-colors"
           >
-            <div className="w-10 h-10 rounded-chip bg-[#8B5CF6]/15 text-[#8B5CF6] flex items-center justify-center">
-              <KeyRound size={20} />
+            <div className="w-8 h-8 rounded-chip bg-[#8B5CF6]/15 text-[#8B5CF6] flex items-center justify-center shrink-0">
+              <KeyRound size={16} />
             </div>
-            <div>
-              <h4 className="text-body font-bold text-app-text group-hover:text-[#8B5CF6] transition-colors">
-                Enter Room Code
+            <div className="min-w-0 w-full">
+              <h4 className="text-caption sm:text-body-sm font-bold text-app-text group-hover:text-[#8B5CF6] transition-colors truncate">
+                Join Code
               </h4>
-              <p className="text-meta-sm text-app-muted mt-0.5">
-                Jump into a friend's active room with a 4-digit code.
+              <p className="text-[10px] sm:text-meta-sm text-app-muted mt-0.5 hidden sm:block truncate">
+                4-digit code
               </p>
             </div>
           </Card>
@@ -266,17 +266,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenRoom, onNavigateTa
           <Card
             interactive={true}
             onClick={() => onNavigateTab?.('discover')}
-            className="p-5 flex flex-col justify-between space-y-3 group hover:border-[#22D3EE] transition-colors"
+            className="p-3 sm:p-4 flex flex-col items-center sm:items-start text-center sm:text-left justify-between space-y-2 group hover:border-[#22D3EE] transition-colors"
           >
-            <div className="w-10 h-10 rounded-chip bg-[#22D3EE]/15 text-[#22D3EE] flex items-center justify-center">
-              <Compass size={20} />
+            <div className="w-8 h-8 rounded-chip bg-[#22D3EE]/15 text-[#22D3EE] flex items-center justify-center shrink-0">
+              <Compass size={16} />
             </div>
-            <div>
-              <h4 className="text-body font-bold text-app-text group-hover:text-[#22D3EE] transition-colors">
-                Discover Music
+            <div className="min-w-0 w-full">
+              <h4 className="text-caption sm:text-body-sm font-bold text-app-text group-hover:text-[#22D3EE] transition-colors truncate">
+                Discover
               </h4>
-              <p className="text-meta-sm text-app-muted mt-0.5">
-                Explore genres, moods, and YouTube search.
+              <p className="text-[10px] sm:text-meta-sm text-app-muted mt-0.5 hidden sm:block truncate">
+                Explore genres & vibes
               </p>
             </div>
           </Card>

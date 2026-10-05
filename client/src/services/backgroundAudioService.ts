@@ -35,12 +35,22 @@ export const createSilentAudioBlob = (): string => {
     // data subchunk
     view.setUint32(36, 0x64617461, false); // "data"
     view.setUint32(40, subChunk2Size, true);
-    // All audio sample bytes remain 0 (silence)
+
+    // Sub-audible 15Hz dither (amplitude = 2 out of 32767 = -84dB)
+    // Completely imperceptible to human ear and below physical phone speaker reproduction,
+    // but ensures iOS AVAudioSession and Android AudioTrack detect non-zero PCM energy
+    // so mobile power management will NOT suspend the audio session when the screen turns off.
+    let offset = 44;
+    for (let i = 0; i < numSamples; i++) {
+      const sample = Math.round(Math.sin((2 * Math.PI * 15 * i) / sampleRate) * 2);
+      view.setInt16(offset, sample, true);
+      offset += 2;
+    }
 
     const blob = new Blob([buffer], { type: 'audio/wav' });
     return URL.createObjectURL(blob);
   } catch (err) {
-    console.warn('Failed to create silent audio blob:', err);
+    console.warn('Failed to create audio blob:', err);
     // Fallback base64 1s silent WAV data URI
     return 'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
   }
