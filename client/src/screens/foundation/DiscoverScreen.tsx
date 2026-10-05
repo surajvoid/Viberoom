@@ -105,7 +105,7 @@ export const DiscoverScreen: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 pb-32">
+    <div className="space-y-8 pb-36">
       {/* Search Bar Input */}
       <div className="space-y-3">
         <div className="relative flex items-center">

@@ -101,7 +101,7 @@ const ShellLayout: React.FC = () => {
         className={`w-full flex-1 flex transition-all duration-300 ${
           isMobileFramePreview
             ? 'max-w-[420px] my-6 rounded-[36px] border-[10px] border-app-surface shadow-2xl overflow-hidden min-h-[820px] max-h-[92vh] flex-col relative'
-            : 'max-w-7xl mx-auto h-screen overflow-hidden'
+            : 'max-w-7xl mx-auto h-[100dvh] overflow-hidden'
         }`}
       >
         {/* Desktop Sidebar (hidden on phone preview or mobile viewports) */}
@@ -125,7 +125,7 @@ const ShellLayout: React.FC = () => {
           />
 
           {/* Scrollable Screen Body */}
-          <main className="flex-1 overflow-y-auto px-mobile-pad md:px-desktop-pad py-5 scrollbar-none">
+          <main className="flex-1 overflow-y-auto px-mobile-pad md:px-desktop-pad py-5 scrollbar-none overscroll-contain">
             {renderActiveTabContent()}
           </main>
 

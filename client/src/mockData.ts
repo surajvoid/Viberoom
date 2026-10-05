@@ -76,6 +76,7 @@ export interface User {
   id: string;
   name: string;
   handle: string;
+  email?: string;
   avatarSvg: string;
   status: 'online' | 'listening' | 'idle' | 'offline';
   currentTrackId?: string;

@@ -25,7 +25,7 @@ export const MiniPlayer: React.FC = () => {
 
   return (
     <div
-      className="fixed bottom-[68px] md:bottom-5 left-0 right-0 z-30 px-3 md:px-6 max-w-2xl mx-auto pointer-events-none"
+      className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px))] md:bottom-5 left-0 right-0 z-30 px-2.5 sm:px-4 md:px-6 max-w-2xl mx-auto pointer-events-none"
     >
       <motion.div
         layoutId="miniPlayerContainer"

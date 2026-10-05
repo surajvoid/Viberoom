@@ -38,11 +38,31 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  html {
+    height: 100%;
+    width: 100%;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+  }
+
   body {
+    height: 100%;
+    width: 100%;
     background-color: var(--app-bg);
     color: var(--app-text);
     font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
     transition: background-color 250ms ease, color 250ms ease;
+    overflow-x: hidden;
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Prevent iOS Safari from auto-zooming inputs on mobile tap */
+  @media screen and (max-width: 768px) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
   }
 }
 

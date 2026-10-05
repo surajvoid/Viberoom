@@ -136,7 +136,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({ onStartRoom })
                       duration: 4,
                       ease: 'easeInOut',
                     }}
-                    className="relative w-64 h-64 sm:w-80 sm:h-80 shadow-2xl rounded-hero overflow-hidden"
+                    className="relative w-56 h-56 sm:w-72 md:w-80 sm:h-72 md:h-80 shadow-2xl rounded-hero overflow-hidden"
                   >
                     <Artwork
                       src={currentTrack.artworkSvg}
@@ -177,7 +177,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({ onStartRoom })
             </div>
 
             {/* Bottom Controls Area */}
-            <div className="p-6 sm:px-8 sm:pb-8 pt-2 space-y-5 shrink-0 bg-app-surface/95 border-t border-app-border/40">
+            <div className="p-5 sm:px-8 sm:pb-8 pt-2 pb-safe space-y-4 sm:space-y-5 shrink-0 bg-app-surface/95 border-t border-app-border/40">
               {/* Title, Artist & Like Button */}
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0 flex-1">

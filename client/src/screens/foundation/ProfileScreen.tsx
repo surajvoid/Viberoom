@@ -1,73 +1,87 @@
 import React, { useState } from 'react';
 import {
   Sparkles,
-  Clock,
-  Music,
   Heart,
-  Flame,
   Share2,
   Check,
-  Disc3,
-  Moon,
-  Headphones,
-  Award,
   LogOut,
+  Radio,
+  Play,
+  Pause,
+  Sliders,
+  Smartphone,
+  ShieldCheck,
+  Music2,
+  Clock,
+  Compass,
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { UserAvatar } from '../../components/ui/UserAvatar.js';
-import { MOCK_USERS, MOCK_TRACKS } from '../../mockData.js';
+import { Artwork } from '../../components/ui/Artwork.js';
 import { useAuth } from '../../context/AuthContext.js';
-import { useRoom } from '../../context/RoomContext.js';
 import { usePlayer } from '../../context/PlayerContext.js';
+import { useTheme } from '../../context/ThemeContext.js';
 
 export const ProfileScreen: React.FC = () => {
   const { currentUser, logout } = useAuth();
-  const { joinRoom } = useRoom();
-  const { playTrack } = usePlayer();
+  const {
+    likedTracks,
+    history,
+    currentTrack,
+    isPlaying,
+    playTrack,
+    togglePlay,
+    toggleLike,
+    isAutoplayEnabled,
+    toggleAutoplay,
+  } = usePlayer();
+  const { theme, toggleTheme } = useTheme();
   const [copied, setCopied] = useState(false);
 
   if (!currentUser) return null;
 
-  const personality = currentUser.musicPersonality;
-
-  const handleSharePersonality = () => {
-    navigator.clipboard?.writeText?.(
-      `My VibeRoom Sonic Archetype: "${personality.sonicArchetype}" (${personality.vibeTag})! Top genre: ${personality.topGenre} 🎧`
-    );
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  const handleShareProfile = () => {
+    const shareText = `Join me on VibeRoom! Listen together in real-time rooms 🎧 Handle: ${currentUser.handle}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   return (
-    <div className="space-y-8 pb-32 select-none">
+    <div className="space-y-6 pb-36 select-none max-w-4xl mx-auto">
       {/* Profile Header Hero */}
-      <div className="relative rounded-hero overflow-hidden bg-gradient-to-br from-app-surface via-app-elevated to-app-surface border border-app-border p-6 sm:p-8 shadow-soft-1">
-        <div className="flex flex-col sm:flex-row items-center gap-6">
+      <div className="relative rounded-hero overflow-hidden bg-gradient-to-br from-app-surface via-app-elevated to-app-surface border border-app-border p-5 sm:p-7 shadow-soft-1">
+        <div className="flex flex-col sm:flex-row items-center gap-5">
           <UserAvatar user={currentUser} size="xl" showPresence={true} />
 
-          <div className="flex-1 text-center sm:text-left space-y-2">
-            <div className="flex items-center justify-center sm:justify-start gap-2">
+          <div className="flex-1 text-center sm:text-left space-y-1.5">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
               <h2 className="text-section-heading md:text-page-title font-extrabold text-app-text">
                 {currentUser.name}
               </h2>
               <Badge variant="accent">
                 <Sparkles size={12} className="inline mr-1" />
-                Active Listener
+                Verified
               </Badge>
             </div>
-            <p className="text-meta text-app-muted">{currentUser.handle}</p>
+            <p className="text-meta font-medium text-app-muted">{currentUser.handle}</p>
+            {currentUser.email && (
+              <p className="text-meta-sm text-app-muted/80">{currentUser.email}</p>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0 pt-2 sm:pt-0">
             <Button
               variant="secondary"
               size="sm"
               icon={copied ? <Check size={14} /> : <Share2 size={14} />}
-              onClick={handleSharePersonality}
+              onClick={handleShareProfile}
             >
-              {copied ? 'Copied Card!' : 'Share Taste'}
+              {copied ? 'Copied Link' : 'Share Profile'}
             </Button>
 
             <Button
@@ -83,137 +97,207 @@ export const ProfileScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Music Personality Section (Gen-Z Social Experience - PRD Section 21) */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-section-heading font-bold text-app-text flex items-center gap-2">
-            <Sparkles size={20} className="text-app-accent" />
-            <span>Music Personality & Sonic Archetype</span>
-          </h3>
-          <p className="text-meta text-app-muted">
-            Calculated from your synchronized listening patterns across social rooms
-          </p>
+      {/* Liked Songs Shelf (Genuine User Data) */}
+      <section className="space-y-3.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Heart size={20} className="text-rose-500 fill-rose-500/20" />
+            <h3 className="text-section-heading font-bold text-app-text">
+              Liked Tracks ({likedTracks.length})
+            </h3>
+          </div>
+          <span className="text-meta-sm text-app-muted">1-Tap to Play</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card className="space-y-2 p-5 border border-app-border">
-            <div className="flex items-center gap-2 text-app-accent">
-              <Music size={18} />
-              <span className="text-meta font-bold uppercase tracking-wider">Top Genre</span>
-            </div>
-            <p className="text-section-heading font-extrabold text-app-text">
-              {personality.topGenre}
+        {likedTracks.length === 0 ? (
+          <Card className="p-6 text-center space-y-2 border border-app-border bg-app-surface/50">
+            <Music2 size={32} className="mx-auto text-app-muted opacity-60" />
+            <p className="text-body font-bold text-app-text">No liked songs yet</p>
+            <p className="text-meta text-app-muted max-w-sm mx-auto">
+              Tap the heart icon on any song while listening or searching to pin your favorite tracks here.
             </p>
-            <p className="text-meta-sm text-app-muted">Top 1% of late-night synth enthusiasts</p>
           </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {likedTracks.map((track) => {
+              const isCurrent = currentTrack?.id === track.id;
+              const isCurrentPlaying = isCurrent && isPlaying;
 
-          <Card className="space-y-2 p-5 border border-app-border">
-            <div className="flex items-center gap-2 text-app-accent">
-              <Flame size={18} />
-              <span className="text-meta font-bold uppercase tracking-wider">Sonic Archetype</span>
-            </div>
-            <p className="text-section-heading font-extrabold text-app-text">
-              {personality.sonicArchetype}
-            </p>
-            <Badge variant="accent">{personality.vibeTag}</Badge>
-          </Card>
+              return (
+                <div
+                  key={track.id}
+                  onClick={() => (isCurrent ? togglePlay() : playTrack(track))}
+                  className={`flex items-center justify-between p-3 rounded-card border transition-all cursor-pointer group ${
+                    isCurrent
+                      ? 'bg-app-accent/10 border-app-accent shadow-sm'
+                      : 'bg-app-surface hover:bg-app-elevated border-app-border'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <Artwork
+                      src={track.artworkSvg}
+                      alt={track.title}
+                      size="sm"
+                      rounded="chip"
+                      isPlaying={isCurrentPlaying}
+                      glowColor={track.accentColor}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-body font-bold truncate ${
+                          isCurrent ? 'text-app-accent' : 'text-app-text'
+                        }`}
+                      >
+                        {track.title}
+                      </p>
+                      <p className="text-meta-sm text-app-muted truncate">{track.artist}</p>
+                    </div>
+                  </div>
 
-          <Card className="space-y-2 p-5 border border-app-border">
-            <div className="flex items-center gap-2 text-app-accent">
-              <Clock size={18} />
-              <span className="text-meta font-bold uppercase tracking-wider">Listening Time</span>
-            </div>
-            <p className="text-section-heading font-extrabold text-app-text">
-              {personality.weeklyListeningHours} hrs
-            </p>
-            <p className="text-meta-sm text-app-muted">This week across 4 social rooms</p>
-          </Card>
-        </div>
-
-        {/* Fun Personality Quick Badges */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 rounded-card bg-app-surface border border-app-border flex items-center gap-3">
-            <Moon size={20} className="text-app-accent shrink-0" />
-            <div>
-              <p className="text-meta-sm font-bold text-app-muted uppercase">Peak Hours</p>
-              <p className="text-body font-bold text-app-text">10 PM – 1 AM</p>
-            </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleLike(track.id);
+                      }}
+                      className="p-2 text-rose-500 hover:scale-110 active:scale-95 transition-transform"
+                      aria-label="Unlike track"
+                    >
+                      <Heart size={16} fill="currentColor" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        isCurrent ? togglePlay() : playTrack(track);
+                      }}
+                      className="w-8 h-8 rounded-full bg-app-elevated group-hover:bg-app-accent text-app-text group-hover:text-white flex items-center justify-center transition-all"
+                      aria-label="Play track"
+                    >
+                      {isCurrentPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-
-          <div className="p-3 rounded-card bg-app-surface border border-app-border flex items-center gap-3">
-            <Award size={20} className="text-app-accent shrink-0" />
-            <div>
-              <p className="text-meta-sm font-bold text-app-muted uppercase">Top Artist</p>
-              <p className="text-body font-bold text-app-text">The Weeknd</p>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-card bg-app-surface border border-app-border flex items-center gap-3">
-            <Headphones size={20} className="text-app-accent shrink-0" />
-            <div>
-              <p className="text-meta-sm font-bold text-app-muted uppercase">Audio Vibe</p>
-              <p className="text-body font-bold text-app-text">Night Drive 🌃</p>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-card bg-app-surface border border-app-border flex items-center gap-3">
-            <Disc3 size={20} className="text-app-accent shrink-0" />
-            <div>
-              <p className="text-meta-sm font-bold text-app-muted uppercase">Rooms Joined</p>
-              <p className="text-body font-bold text-app-text">32 Sessions</p>
-            </div>
-          </div>
-        </div>
+        )}
       </section>
 
-      {/* Social Music Match / Taste Compatibility (PRD Section 21) */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-section-heading font-bold text-app-text flex items-center gap-2">
-            <Heart size={20} className="text-rose-500" />
-            <span>Music Match Compatibility</span>
+      {/* Listening History (Genuine Session History) */}
+      {history.length > 0 && (
+        <section className="space-y-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock size={20} className="text-app-accent" />
+              <h3 className="text-section-heading font-bold text-app-text">
+                Recently Played ({history.length})
+              </h3>
+            </div>
+            <span className="text-meta-sm text-app-muted">Session History</span>
+          </div>
+
+          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+            {history.slice(0, 8).map((track, idx) => (
+              <div
+                key={`${track.id}-${idx}`}
+                onClick={() => playTrack(track)}
+                className="w-36 shrink-0 p-2.5 rounded-card bg-app-surface hover:bg-app-elevated border border-app-border transition-all cursor-pointer group"
+              >
+                <Artwork
+                  src={track.artworkSvg}
+                  alt={track.title}
+                  size="md"
+                  rounded="card"
+                  glowColor={track.accentColor}
+                />
+                <p className="text-body-sm font-bold text-app-text truncate mt-2 group-hover:text-app-accent transition-colors">
+                  {track.title}
+                </p>
+                <p className="text-meta-sm text-app-muted truncate">{track.artist}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Mobile Playback & App Settings */}
+      <section className="space-y-3.5">
+        <div className="flex items-center gap-2">
+          <Sliders size={20} className="text-app-accent" />
+          <h3 className="text-section-heading font-bold text-app-text">
+            Playback & Experience Settings
           </h3>
-          <span className="text-meta-sm text-app-muted">Based on shared sonic vibe</span>
         </div>
 
-        <Card className="p-6 border border-app-border bg-gradient-to-br from-app-surface via-app-elevated/40 to-app-surface space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* Autoplay Similar Songs */}
+          <Card className="p-4.5 border border-app-border flex items-center justify-between gap-4">
             <div className="space-y-1">
-              <h4 className="text-body font-bold text-app-text flex items-center gap-2">
-                <Sparkles size={16} className="text-app-accent" />
-                Compare Sonic Taste With Friends
-              </h4>
-              <p className="text-meta text-app-muted max-w-lg">
-                Invite friends to your listening sessions. As you vote on queue songs together in rooms, VibeRoom calculates your real-time compatibility percentage!
+              <p className="text-body font-bold text-app-text flex items-center gap-2">
+                <Radio size={16} className="text-app-accent" />
+                Infinite Similar Autoplay
+              </p>
+              <p className="text-meta-sm text-app-muted">
+                Automatically finds and plays musically similar songs when the queue ends or you're idle.
               </p>
             </div>
-
-            <Button
-              variant="primary"
-              size="sm"
-              icon={copied ? <Check size={14} /> : <Share2 size={14} />}
-              onClick={handleSharePersonality}
-              className="shrink-0"
+            <button
+              onClick={toggleAutoplay}
+              aria-label="Toggle autoplay"
+              className={`w-12 h-6.5 rounded-full p-0.5 transition-colors shrink-0 ${
+                isAutoplayEnabled ? 'bg-app-accent' : 'bg-app-elevated border border-app-border'
+              }`}
             >
-              {copied ? 'Link Copied!' : 'Invite Friends'}
-            </Button>
-          </div>
+              <div
+                className={`w-5.5 h-5.5 rounded-full bg-white shadow-sm transition-transform ${
+                  isAutoplayEnabled ? 'translate-x-5.5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </Card>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-app-border">
-            <div className="p-3 rounded-card bg-app-surface/60 border border-app-border">
-              <p className="text-meta-sm font-bold text-app-accent">1. Share Code</p>
-              <p className="text-meta-sm text-app-muted mt-0.5">Send your room code or profile link</p>
+          {/* Theme Switcher */}
+          <Card className="p-4.5 border border-app-border flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-body font-bold text-app-text flex items-center gap-2">
+                <Sparkles size={16} className="text-app-accent" />
+                Appearance Mode
+              </p>
+              <p className="text-meta-sm text-app-muted">
+                Currently using <span className="font-bold capitalize">{theme}</span> theme palette.
+              </p>
             </div>
-            <div className="p-3 rounded-card bg-app-surface/60 border border-app-border">
-              <p className="text-meta-sm font-bold text-app-accent">2. Listen in Sync</p>
-              <p className="text-meta-sm text-app-muted mt-0.5">React and vote on upcoming YouTube tracks</p>
+            <Button variant="secondary" size="sm" onClick={toggleTheme} className="shrink-0">
+              Toggle {theme === 'dark' ? 'Light' : 'Dark'}
+            </Button>
+          </Card>
+
+          {/* Background Audio Capability Badge */}
+          <Card className="p-4.5 border border-app-border flex items-center gap-3 bg-app-surface/60">
+            <div className="w-9 h-9 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+              <ShieldCheck size={18} />
             </div>
-            <div className="p-3 rounded-card bg-app-surface/60 border border-app-border">
-              <p className="text-meta-sm font-bold text-app-accent">3. Unlock Taste Score</p>
-              <p className="text-meta-sm text-app-muted mt-0.5">Discover mutual music compatibility</p>
+            <div>
+              <p className="text-body-sm font-bold text-app-text">Background Audio Active</p>
+              <p className="text-meta-sm text-app-muted">
+                Music plays continuously on phone sleep, screen lock, and tab switch.
+              </p>
             </div>
-          </div>
-        </Card>
+          </Card>
+
+          {/* PWA Mobile Optimization */}
+          <Card className="p-4.5 border border-app-border flex items-center gap-3 bg-app-surface/60">
+            <div className="w-9 h-9 rounded-full bg-app-accent/15 text-app-accent flex items-center justify-center shrink-0">
+              <Smartphone size={18} />
+            </div>
+            <div>
+              <p className="text-body-sm font-bold text-app-text">Mobile-First PWA</p>
+              <p className="text-meta-sm text-app-muted">
+                Add to Home Screen for fullscreen native app experience with Lock-Screen controls.
+              </p>
+            </div>
+          </Card>
+        </div>
       </section>
     </div>
   );
