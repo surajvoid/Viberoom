@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getSongs, getSongById, getPlaylists, getPlaylistById, getRooms, getRoomById, getFriendsActivity, getMusicMatch, getDedications, createDedication, getRadioStations, getTopCharts, uploadSong, searchCatalog, searchYouTube, } from '../controllers/apiController.js';
+import { getSongs, getSongById, getPlaylists, getPlaylistById, getRooms, getRoomById, createRoom, getFriendsActivity, getMusicMatch, getDedications, createDedication, getRadioStations, getTopCharts, uploadSong, searchCatalog, searchYouTube, } from '../controllers/apiController.js';
 const router = Router();
 router.get('/songs', getSongs);
 router.get('/songs/:id', getSongById);
@@ -7,6 +7,7 @@ router.get('/playlists', getPlaylists);
 router.get('/playlists/:id', getPlaylistById);
 router.get('/rooms', getRooms);
 router.get('/rooms/:id', getRoomById);
+router.post('/rooms', createRoom);
 router.get('/friends/activity', getFriendsActivity);
 router.get('/match/:user1Id/:user2Id', getMusicMatch);
 router.get('/dedications', getDedications);

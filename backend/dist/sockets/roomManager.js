@@ -10,8 +10,8 @@ export class RoomManager {
         }
     }
     getRoom(roomId) {
-        // Try by roomId first
-        let room = this.rooms.get(roomId);
+        // Try by roomId first (or case-insensitive)
+        let room = this.rooms.get(roomId) || this.rooms.get(roomId.toLowerCase()) || this.rooms.get(roomId.toUpperCase());
         if (!room) {
             // Try finding by room code or case-insensitive search
             room = this.getRoomByCode(roomId);
@@ -77,7 +77,7 @@ export class RoomManager {
     }
     createRoom(params) {
         const slug = params.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-        const code = this.generateUniqueCode(this.rooms.values());
+        const code = params.code ? params.code.toUpperCase() : this.generateUniqueCode(this.rooms.values());
         const roomId = `room-${slug || 'vibe'}-${code.toLowerCase()}`;
         const newRoom = {
             id: roomId,
@@ -97,6 +97,7 @@ export class RoomManager {
             listenerCount: 1,
         };
         this.rooms.set(roomId, newRoom);
+        this.rooms.set(code.toUpperCase(), newRoom);
         return newRoom;
     }
     joinRoom(roomIdOrCode, socketId, user) {

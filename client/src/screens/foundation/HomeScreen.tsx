@@ -258,7 +258,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenRoom, onNavigateTa
                 Join Code
               </h4>
               <p className="text-[10px] sm:text-meta-sm text-app-muted mt-0.5 hidden sm:block truncate">
-                4-digit code
+                Enter room code
               </p>
             </div>
           </Card>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -21,6 +21,8 @@ import {
   Copy,
   Check,
   Search,
+  Youtube,
+  Loader2,
 } from 'lucide-react';
 import { useRoom } from '../../context/RoomContext.js';
 import { usePlayer } from '../../context/PlayerContext.js';
@@ -34,6 +36,7 @@ import { GifPickerModal } from './GifPickerModal.js';
 import { SuggestSongModal } from './SuggestSongModal.js';
 import { QueueItem } from '../../mockData.js';
 import { useAuth } from '../../context/AuthContext.js';
+import { searchYouTube } from '../../services/searchService.js';
 
 export const PrivateRoomModal: React.FC = () => {
   const { currentUser } = useAuth();
@@ -57,6 +60,44 @@ export const PrivateRoomModal: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'queue' | 'chat' | 'people'>('queue');
   const [chatInput, setChatInput] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
+  const [isVideoMode, setIsVideoMode] = useState(false);
+  const [resolvedYoutubeId, setResolvedYoutubeId] = useState<string | null>(null);
+  const [loadingVideo, setLoadingVideo] = useState(false);
+
+  useEffect(() => {
+    if (!activeRoom?.currentTrack) {
+      setResolvedYoutubeId(null);
+      setLoadingVideo(false);
+      return;
+    }
+
+    if (activeRoom.currentTrack.youtubeId) {
+      setResolvedYoutubeId(activeRoom.currentTrack.youtubeId);
+      setLoadingVideo(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoadingVideo(true);
+    searchYouTube(`${activeRoom.currentTrack.title} ${activeRoom.currentTrack.artist}`)
+      .then((results) => {
+        if (isMounted) {
+          if (results.length > 0 && results[0].youtubeId) {
+            setResolvedYoutubeId(results[0].youtubeId);
+          } else {
+            setResolvedYoutubeId(null);
+          }
+          setLoadingVideo(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setLoadingVideo(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeRoom?.currentTrack]);
 
   if (!activeRoom) return null;
 
@@ -195,6 +236,62 @@ export const PrivateRoomModal: React.FC = () => {
                   Search Music
                 </Button>
               </div>
+            ) : isVideoMode ? (
+              <div className="p-3 sm:p-5 bg-black/95 border-b border-app-border shrink-0 flex flex-col items-center">
+                <div className="w-full max-w-2xl aspect-video rounded-card overflow-hidden shadow-2xl border border-app-border/60 bg-black relative flex items-center justify-center">
+                  {resolvedYoutubeId ? (
+                    <iframe
+                      src={`https://www.youtube-nocookie.com/embed/${resolvedYoutubeId}?autoplay=1&enablejsapi=1`}
+                      title={activeRoom.currentTrack.title}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-full border-0"
+                    />
+                  ) : loadingVideo ? (
+                    <div className="flex flex-col items-center justify-center gap-2 p-6 text-app-muted">
+                      <Loader2 size={24} className="animate-spin text-app-accent" />
+                      <span className="text-meta-sm">Loading music video...</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-2 p-6 text-center text-app-muted">
+                      <Youtube size={32} className="text-rose-400/60" />
+                      <p className="text-body font-bold text-app-text">Video stream not available</p>
+                      <p className="text-meta-sm">Playing in high-fidelity audio mode.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Video controls & details bar */}
+                <div className="w-full max-w-2xl flex items-center justify-between pt-2.5 px-1 flex-wrap gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-body font-bold text-app-text truncate">{activeRoom.currentTrack.title}</p>
+                    <p className="text-meta-sm text-app-muted truncate">{activeRoom.currentTrack.artist}</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setIsVideoMode(false)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-chip text-meta-sm font-bold bg-app-elevated hover:bg-app-accent/20 text-app-text hover:text-app-accent border border-app-border transition-colors"
+                    >
+                      <Music2 size={14} />
+                      <span>Switch to Artwork</span>
+                    </button>
+
+                    <div className="flex items-center gap-1 bg-app-elevated/80 p-1 rounded-full border border-app-border">
+                      {reactionEmojis.map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={() => sendReaction(emoji)}
+                          className="w-7 h-7 rounded-full hover:scale-125 active:scale-95 transition-transform flex items-center justify-center text-base"
+                          title={`Send ${emoji}`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="p-4 sm:p-6 bg-app-surface/50 border-b border-app-border flex flex-col sm:flex-row items-center gap-4 shrink-0">
                 <Artwork
@@ -221,18 +318,30 @@ export const PrivateRoomModal: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Floating Reaction Trigger Buttons */}
-                <div className="flex items-center gap-1.5 bg-app-elevated/80 p-1.5 rounded-full border border-app-border shrink-0">
-                  {reactionEmojis.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => sendReaction(emoji)}
-                      className="w-8 h-8 rounded-full hover:scale-125 active:scale-95 transition-transform flex items-center justify-center text-lg leading-none"
-                      title={`Send ${emoji} reaction`}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
+                {/* Watch Video Mode Button + Reaction Buttons */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsVideoMode(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-chip text-meta-sm font-bold bg-app-elevated hover:bg-rose-500/20 text-app-text hover:text-rose-400 border border-app-border hover:border-rose-500/40 transition-colors shadow-sm"
+                    title="Watch Official Music Video"
+                  >
+                    <Youtube size={16} className="text-rose-500" />
+                    <span>Watch Video</span>
+                  </button>
+
+                  {/* Floating Reaction Trigger Buttons */}
+                  <div className="flex items-center gap-1.5 bg-app-elevated/80 p-1.5 rounded-full border border-app-border shrink-0">
+                    {reactionEmojis.map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => sendReaction(emoji)}
+                        className="w-8 h-8 rounded-full hover:scale-125 active:scale-95 transition-transform flex items-center justify-center text-lg leading-none"
+                        title={`Send ${emoji} reaction`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

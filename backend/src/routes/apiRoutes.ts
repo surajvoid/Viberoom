@@ -6,6 +6,7 @@ import {
   getPlaylistById,
   getRooms,
   getRoomById,
+  createRoom,
   getFriendsActivity,
   getMusicMatch,
   getDedications,
@@ -25,6 +26,7 @@ router.get('/playlists', getPlaylists);
 router.get('/playlists/:id', getPlaylistById);
 router.get('/rooms', getRooms);
 router.get('/rooms/:id', getRoomById);
+router.post('/rooms', createRoom);
 router.get('/friends/activity', getFriendsActivity);
 router.get('/match/:user1Id/:user2Id', getMusicMatch);
 router.get('/dedications', getDedications);

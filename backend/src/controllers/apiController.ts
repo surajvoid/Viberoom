@@ -47,12 +47,40 @@ export const getRooms = (req: Request, res: Response) => {
 
 export const getRoomById = (req: Request, res: Response) => {
   const roomId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const room = roomManager.getRoom(roomId);
+  let room = roomManager.getRoom(roomId);
+  if (!room) {
+    room = roomManager.getRoomByCode(roomId);
+  }
   if (!room) {
     res.status(404).json({ error: 'Room not found' });
     return;
   }
   res.json({ room });
+};
+
+export const createRoom = (req: Request, res: Response) => {
+  const { title, name, code, mode, hostUser } = req.body;
+  const roomTitle = title || name || (code ? `Room ${code}` : 'Listening Room');
+  const user = hostUser || {
+    id: `usr-${Date.now()}`,
+    name: 'Host',
+    handle: '@host',
+    avatarUrl: '',
+    status: 'online',
+    streakDays: 1,
+    totalListeningHours: 0,
+    totalPlays: 0,
+  };
+
+  const room = roomManager.createRoom({
+    title: roomTitle,
+    hostUser: user,
+    mode: mode || 'private',
+    code: code ? String(code).toUpperCase() : undefined,
+    controlMode: 'everyone',
+  });
+
+  res.status(201).json({ room });
 };
 
 export const getFriendsActivity = (req: Request, res: Response) => {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, KeyRound, AlertCircle } from 'lucide-react';
+import { X, KeyRound, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button.js';
 import { useRoom } from '../../context/RoomContext.js';
 
@@ -8,18 +8,30 @@ export const JoinRoomCodeModal: React.FC = () => {
   const { isJoinModalOpen, setIsJoinModalOpen, joinRoom } = useRoom();
   const [code, setCode] = useState('');
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   if (!isJoinModalOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const clean = code.trim();
+    if (!clean || loading) return;
+
     setError(false);
-    const success = joinRoom(code.trim());
-    if (success) {
-      setCode('');
-      setIsJoinModalOpen(false);
-    } else {
+    setLoading(true);
+
+    try {
+      const success = await joinRoom(clean);
+      if (success) {
+        setCode('');
+        setIsJoinModalOpen(false);
+      } else {
+        setError(true);
+      }
+    } catch {
       setError(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -30,7 +42,7 @@ export const JoinRoomCodeModal: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={() => setIsJoinModalOpen(false)}
+          onClick={() => !loading && setIsJoinModalOpen(false)}
           className="fixed inset-0 bg-black/70 backdrop-blur-sm"
         />
 
@@ -44,6 +56,7 @@ export const JoinRoomCodeModal: React.FC = () => {
           <div className="flex justify-end">
             <button
               onClick={() => setIsJoinModalOpen(false)}
+              disabled={loading}
               className="p-1 rounded-full text-app-muted hover:text-app-text transition-colors"
             >
               <X size={18} />
@@ -59,14 +72,14 @@ export const JoinRoomCodeModal: React.FC = () => {
               Join with Room Code
             </h3>
             <p className="text-meta-sm text-app-muted mt-1">
-              Enter the 6-character room code (e.g. MX7K2P)
+              Enter the room code (e.g. MX7K2P)
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <input
               type="text"
-              maxLength={6}
+              maxLength={8}
               autoFocus
               value={code}
               onChange={(e) => {
@@ -80,7 +93,7 @@ export const JoinRoomCodeModal: React.FC = () => {
             {error && (
               <p className="text-meta-sm text-rose-400 flex items-center justify-center gap-1 font-semibold">
                 <AlertCircle size={14} />
-                Room not found. Check code or create a room.
+                Unable to join room. Please check the code and try again.
               </p>
             )}
 
@@ -89,9 +102,10 @@ export const JoinRoomCodeModal: React.FC = () => {
               variant="primary"
               size="md"
               fullWidth
-              disabled={code.trim().length !== 6}
+              disabled={code.trim().length < 3 || loading}
+              icon={loading ? <Loader2 size={16} className="animate-spin" /> : undefined}
             >
-              Connect to Room
+              {loading ? 'Connecting...' : 'Connect to Room'}
             </Button>
           </form>
         </motion.div>

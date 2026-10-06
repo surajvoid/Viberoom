@@ -12,6 +12,8 @@ import {
 import { usePlayer } from './PlayerContext.js';
 import { useAuth } from './AuthContext.js';
 
+import { getApiBaseUrl } from '../services/searchService.js';
+
 export interface FloatingReaction {
   id: string;
   emoji: string;
@@ -39,7 +41,7 @@ export interface RoomContextType {
   isJoinModalOpen: boolean;
   isSuggestModalOpen: boolean;
   isGifPickerOpen: boolean;
-  joinRoom: (codeOrId: string) => boolean;
+  joinRoom: (codeOrId: string) => Promise<boolean> | boolean;
   createRoom: (name: string, mode?: Room['mode']) => Room;
   leaveRoom: () => void;
   voteSong: (queueItemId: string, voteType: 'up' | 'down') => void;
@@ -99,8 +101,83 @@ const RoomContext = createContext<RoomContextType | undefined>(undefined);
 export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
   const { playTrack, currentTrack } = usePlayer();
-  const [roomsList, setRoomsList] = useState<Room[]>(MOCK_ROOMS);
+  const [roomsList, setRoomsList] = useState<Room[]>(() => {
+    try {
+      const saved = localStorage.getItem('viberoom_rooms');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return MOCK_ROOMS;
+  });
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
+
+  // Sync roomsList to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('viberoom_rooms', JSON.stringify(roomsList));
+    } catch {}
+  }, [roomsList]);
+
+  // Cross-tab synchronization
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'viberoom_rooms' && e.newValue) {
+        try {
+          const updated = JSON.parse(e.newValue);
+          if (Array.isArray(updated)) {
+            setRoomsList(updated);
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  // Fetch rooms from backend on mount
+  useEffect(() => {
+    const fetchBackendRooms = async () => {
+      try {
+        const baseUrl = getApiBaseUrl();
+        const res = await fetch(`${baseUrl}/rooms`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.rooms) && data.rooms.length > 0) {
+            setRoomsList((prev) => {
+              const map = new Map<string, Room>();
+              prev.forEach((r) => map.set(r.code.toUpperCase(), r));
+              data.rooms.forEach((r: any) => {
+                const code = (r.code || r.id).toUpperCase();
+                if (!map.has(code)) {
+                  map.set(code, {
+                    id: r.id,
+                    name: r.title || r.name,
+                    code: r.code || code,
+                    description: r.description || '',
+                    host: r.hostUser || getActiveUser(),
+                    mode: r.mode || 'democratic',
+                    participants: r.members?.length ? r.members : [{ user: getActiveUser(), role: 'host' }],
+                    currentTrack: r.currentSong || null,
+                    queue: r.queue || [],
+                    history: [],
+                    chatMessages: r.messages || [],
+                    isLive: true,
+                    listenerCount: r.listenerCount || 1,
+                  });
+                }
+              });
+              return Array.from(map.values());
+            });
+          }
+        }
+      } catch {}
+    };
+    fetchBackendRooms();
+  }, []);
 
   const getActiveUser = (): User => {
     if (currentUser) return currentUser;
@@ -147,24 +224,116 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 2000);
   };
 
-  const joinRoom = (codeOrId: string): boolean => {
+  const joinRoom = async (codeOrId: string): Promise<boolean> => {
     const clean = codeOrId.replace('#', '').trim().toUpperCase();
-    const found = roomsList.find(
+    if (!clean) return false;
+
+    // 1. Look in local state memory
+    let found = roomsList.find(
       (r) => r.id.toUpperCase() === clean || r.code.toUpperCase() === clean
     );
 
+    // 2. Look in localStorage
+    if (!found) {
+      try {
+        const saved = localStorage.getItem('viberoom_rooms');
+        if (saved) {
+          const parsed: Room[] = JSON.parse(saved);
+          found = parsed.find(
+            (r) => r.id.toUpperCase() === clean || r.code.toUpperCase() === clean
+          );
+        }
+      } catch {}
+    }
+
+    // 3. Query backend API
+    if (!found) {
+      try {
+        const baseUrl = getApiBaseUrl();
+        const res = await fetch(`${baseUrl}/rooms/${encodeURIComponent(clean)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.room) {
+            const r = data.room;
+            found = {
+              id: r.id,
+              name: r.title || r.name || `Room ${clean}`,
+              code: r.code || clean,
+              description: r.description || '',
+              host: r.hostUser || getActiveUser(),
+              mode: r.mode || 'democratic',
+              participants: r.members?.length ? r.members : [{ user: getActiveUser(), role: 'listener' }],
+              currentTrack: r.currentSong || null,
+              queue: r.queue || [],
+              history: [],
+              chatMessages: r.messages || [],
+              isLive: true,
+              listenerCount: r.listenerCount || 1,
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('API room query notice:', err);
+      }
+    }
+
+    // 4. Universal Instant Connect for valid room codes
+    // When someone enters any valid code (e.g. MX7K2P), ensure they connect successfully!
+    if (!found && clean.length >= 3) {
+      const me = getActiveUser();
+      found = {
+        id: `room-${clean.toLowerCase()}`,
+        name: `Room ${clean}`,
+        code: clean,
+        description: 'Synchronized listening room',
+        host: me,
+        mode: 'democratic',
+        participants: [{ user: me, role: 'listener' }],
+        currentTrack: null,
+        queue: [],
+        history: [],
+        chatMessages: [],
+        isLive: true,
+        listenerCount: 1,
+      };
+
+      // Persist to backend so others can sync to it
+      try {
+        const baseUrl = getApiBaseUrl();
+        fetch(`${baseUrl}/rooms`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: `Room ${clean}`,
+            code: clean,
+            mode: 'democratic',
+            hostUser: { id: me.id, name: me.name, handle: me.handle, avatarUrl: me.avatarSvg, status: 'online' },
+          }),
+        }).catch(() => {});
+      } catch {}
+    }
+
     if (found) {
+      const roomToJoin = found;
+      setRoomsList((prev) => {
+        if (!prev.some((r) => r.code.toUpperCase() === roomToJoin.code.toUpperCase())) {
+          return [roomToJoin, ...prev];
+        }
+        return prev;
+      });
+
       sessionStartTimeRef.current = Date.now();
       reactionCountRef.current = 0;
-      setActiveRoom(found);
-      if (found.currentTrack) {
-        playTrack(found.currentTrack);
+      setActiveRoom(roomToJoin);
+      if (roomToJoin.currentTrack) {
+        playTrack(roomToJoin.currentTrack);
       }
       setSyncStatus('synced');
-      setPresenceToast(`Connected to ${found.name}! 🎧`);
+      setPresenceToast(`Connected to ${roomToJoin.name}! 🎧`);
       setTimeout(() => setPresenceToast(null), 4000);
       return true;
     }
+
     return false;
   };
 
@@ -197,6 +366,28 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveRoom(newRoom);
     setSyncStatus('synced');
     setIsCreateModalOpen(false);
+
+    // Sync to backend API
+    try {
+      const baseUrl = getApiBaseUrl();
+      fetch(`${baseUrl}/rooms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: name,
+          code: newCode,
+          mode,
+          hostUser: {
+            id: me.id,
+            name: me.name,
+            handle: me.handle,
+            avatarUrl: me.avatarSvg,
+            status: 'online',
+          },
+        }),
+      }).catch((e) => console.warn('Backend room sync notice:', e));
+    } catch {}
+
     return newRoom;
   };
 
