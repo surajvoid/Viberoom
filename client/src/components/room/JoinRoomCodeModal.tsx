@@ -31,13 +31,13 @@ export const JoinRoomCodeModal: React.FC = () => {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={() => setIsJoinModalOpen(false)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm"
         />
 
         <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
+          initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
+          exit={{ scale: 0.95, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 350, damping: 28 }}
           className="relative w-full max-w-sm bg-app-surface border border-app-border rounded-hero p-6 shadow-2xl z-10 space-y-4 text-center"
         >
@@ -59,7 +59,7 @@ export const JoinRoomCodeModal: React.FC = () => {
               Join with Room Code
             </h3>
             <p className="text-meta-sm text-app-muted mt-1">
-              Enter the 4-digit code provided by your host (e.g. 8492)
+              Enter the 6-character room code (e.g. MX7K2P)
             </p>
           </div>
 
@@ -67,13 +67,14 @@ export const JoinRoomCodeModal: React.FC = () => {
             <input
               type="text"
               maxLength={6}
+              autoFocus
               value={code}
               onChange={(e) => {
                 setError(false);
-                setCode(e.target.value.toUpperCase());
+                setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
               }}
-              placeholder="e.g. 8492"
-              className="w-full text-center text-2xl font-mono font-bold tracking-widest bg-app-elevated text-app-text px-4 py-3 rounded-card border border-app-border focus:border-app-accent focus:outline-none"
+              placeholder="e.g. MX7K2P"
+              className="w-full text-center text-2xl font-mono font-bold tracking-widest bg-app-elevated text-app-text px-4 py-3 rounded-card border border-app-border focus:border-app-accent focus:outline-none uppercase"
             />
 
             {error && (
@@ -88,7 +89,7 @@ export const JoinRoomCodeModal: React.FC = () => {
               variant="primary"
               size="md"
               fullWidth
-              disabled={code.trim().length < 3}
+              disabled={code.trim().length !== 6}
             >
               Connect to Room
             </Button>

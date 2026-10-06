@@ -1,4 +1,4 @@
-import { initialRooms, mockSongs, mockDedications } from '../models/mockData.js';
+import { initialRooms, mockDedications } from '../models/mockData.js';
 export class RoomManager {
     rooms = new Map();
     socketToRoom = new Map();
@@ -50,12 +50,35 @@ export class RoomManager {
         const estimated = room.positionMs + elapsed;
         return estimated > songDurationMs ? songDurationMs : estimated;
     }
+    generateUniqueCode(existingRooms) {
+        const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+        const numbers = '23456789';
+        const existingCodes = new Set(Array.from(existingRooms).map((r) => r.code?.toUpperCase()).filter(Boolean));
+        for (let attempt = 0; attempt < 1000; attempt++) {
+            const codeArr = [];
+            const numLetters = 2 + Math.floor(Math.random() * 3);
+            const numDigits = 6 - numLetters;
+            for (let i = 0; i < numLetters; i++) {
+                codeArr.push(letters[Math.floor(Math.random() * letters.length)]);
+            }
+            for (let i = 0; i < numDigits; i++) {
+                codeArr.push(numbers[Math.floor(Math.random() * numbers.length)]);
+            }
+            for (let i = codeArr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [codeArr[j], codeArr[i]] = [codeArr[i], codeArr[j]];
+            }
+            const code = codeArr.join('');
+            if (!existingCodes.has(code)) {
+                return code;
+            }
+        }
+        return 'MX7K2P';
+    }
     createRoom(params) {
         const slug = params.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-        const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-        const roomId = `room-${slug || 'vibe'}-${randomSuffix}`;
-        // Groic-style short numeric code e.g. 7482
-        const code = randomSuffix.toString();
+        const code = this.generateUniqueCode(this.rooms.values());
+        const roomId = `room-${slug || 'vibe'}-${code.toLowerCase()}`;
         const newRoom = {
             id: roomId,
             code,
@@ -63,22 +86,13 @@ export class RoomManager {
             mode: params.mode || 'private',
             controlMode: params.controlMode || 'everyone',
             hostId: params.hostUser.id,
-            currentSong: params.initialSong || mockSongs[0],
-            isPlaying: true,
+            currentSong: params.initialSong || null,
+            isPlaying: !!params.initialSong,
             positionMs: 0,
             serverTimestamp: Date.now(),
             members: [],
-            queue: [params.initialSong || mockSongs[0]],
-            messages: [
-                {
-                    id: `msg-welcome-${Date.now()}`,
-                    roomId,
-                    user: params.hostUser,
-                    text: `created the room. Share code ${code} to listen together!`,
-                    timestamp: Date.now(),
-                    type: 'system',
-                },
-            ],
+            queue: params.initialSong ? [params.initialSong] : [],
+            messages: [],
             reactions: [],
             listenerCount: 1,
         };
@@ -96,7 +110,6 @@ export class RoomManager {
                 title: roomIdOrCode.startsWith('room-') ? 'LISTEN TOGETHER' : `ROOM ${roomIdOrCode}`,
                 hostUser: user,
                 mode: 'private',
-                initialSong: mockSongs[0],
             });
         }
         // Leave any previous room

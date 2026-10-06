@@ -38,7 +38,7 @@ const ShellLayout: React.FC = () => {
           <p className="font-extrabold text-[20px] text-app-text tracking-tight">
             Vibe<span className="text-app-accent">Room</span>
           </p>
-          <p className="text-meta text-app-muted">Preparing synchronized soundscapes...</p>
+          <p className="text-meta text-app-muted">Connecting to your music...</p>
         </div>
       </div>
     );

@@ -63,11 +63,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               </span>
             )}
           </h1>
-          <p className="text-meta-sm text-app-muted hidden sm:block">
-            {currentTab === 'home'
-              ? 'Synchronized social soundscapes'
-              : 'Listen, discover, and vibe together'}
-          </p>
         </div>
       </div>
 

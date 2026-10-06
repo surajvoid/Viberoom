@@ -125,7 +125,7 @@ export interface Room {
   host: User;
   mode: 'dj' | 'democratic' | 'chill';
   participants: RoomParticipant[];
-  currentTrack: Track;
+  currentTrack: Track | null;
   queue: QueueItem[];
   history: Track[];
   chatMessages: ChatMessage[];

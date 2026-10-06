@@ -40,10 +40,13 @@ export interface RoomContextType {
   isSuggestModalOpen: boolean;
   isGifPickerOpen: boolean;
   joinRoom: (codeOrId: string) => boolean;
-  createRoom: (name: string, mode?: Room['mode'], description?: string) => Room;
+  createRoom: (name: string, mode?: Room['mode']) => Room;
   leaveRoom: () => void;
   voteSong: (queueItemId: string, voteType: 'up' | 'down') => void;
   suggestSong: (track: Track) => void;
+  playRoomSong: (track: Track) => void;
+  playNextSong: (track: Track) => void;
+  addToRoomQueue: (track: Track) => void;
   removeQueueSong: (queueItemId: string) => void;
   sendMessage: (
     content: string,
@@ -60,6 +63,36 @@ export interface RoomContextType {
   setIsSuggestModalOpen: (open: boolean) => void;
   setIsGifPickerOpen: (open: boolean) => void;
 }
+
+export const generateUniqueRoomCode = (existingRooms: { code?: string }[] = []): string => {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const numbers = '23456789';
+  const existingCodes = new Set(existingRooms.map((r) => r.code?.toUpperCase()).filter(Boolean));
+
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const codeArr: string[] = [];
+    const numLetters = 2 + Math.floor(Math.random() * 3); // 2, 3, or 4 letters
+    const numDigits = 6 - numLetters; // 4, 3, or 2 digits
+
+    for (let i = 0; i < numLetters; i++) {
+      codeArr.push(letters[Math.floor(Math.random() * letters.length)]);
+    }
+    for (let i = 0; i < numDigits; i++) {
+      codeArr.push(numbers[Math.floor(Math.random() * numbers.length)]);
+    }
+
+    for (let i = codeArr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [codeArr[i], codeArr[j]] = [codeArr[j], codeArr[i]];
+    }
+
+    const code = codeArr.join('');
+    if (!existingCodes.has(code)) {
+      return code;
+    }
+  }
+  return 'MX7K2P';
+};
 
 const RoomContext = createContext<RoomContextType | undefined>(undefined);
 
@@ -100,71 +133,6 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const sessionStartTimeRef = useRef<number>(Date.now());
   const reactionCountRef = useRef<number>(0);
 
-  // Simulated live events in active room (Discord vibe)
-  useEffect(() => {
-    if (!activeRoom) return;
-
-    const interval = setInterval(() => {
-      const randomAction = Math.random();
-
-      if (randomAction < 0.35) {
-        // Simulated reaction
-        const emojis = ['❤️', '🔥', '😭', '⚡', '🎵', '🫶'];
-        const emoji = emojis[Math.floor(Math.random() * emojis.length)];
-        const count = Math.floor(Math.random() * 3) + 1;
-        triggerFloatingReaction(emoji, count);
-        reactionCountRef.current += count;
-      } else if (randomAction < 0.7) {
-        // Simulated chat message from a friend
-        const fakeFriends = MOCK_USERS.slice(1, 4);
-        const sender = fakeFriends[Math.floor(Math.random() * fakeFriends.length)];
-        const msgs = [
-          'This transition is so smooth 🎧',
-          'Vibing so hard right now 🔥🔥',
-          'Who added this? 10/10 choice!',
-          'Turn up the bass a bit 🙌',
-          'Voting up the next track in queue ❤️',
-        ];
-        const text = msgs[Math.floor(Math.random() * msgs.length)];
-
-        setActiveRoom((prev) => {
-          if (!prev) return null;
-          const newMsg: ChatMessage = {
-            id: `msg-${Date.now()}`,
-            sender,
-            type: 'text',
-            content: text,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          return {
-            ...prev,
-            chatMessages: [...prev.chatMessages, newMsg],
-          };
-        });
-
-        // Show presence toast
-        setPresenceToast(`${sender.name}: "${text}"`);
-        setTimeout(() => setPresenceToast(null), 3500);
-      } else {
-        // Simulated vote bump
-        setActiveRoom((prev) => {
-          if (!prev || prev.queue.length === 0) return prev;
-          const targetItem = prev.queue[0];
-          const updated = prev.queue.map((item) =>
-            item.id === targetItem.id ? { ...item, votes: item.votes + 1 } : item
-          );
-          // Sort by votes
-          updated.sort((a, b) => b.votes - a.votes);
-          return { ...prev, queue: updated };
-        });
-        setPresenceToast(`🔥 Trending in room: +1 vote on upcoming track`);
-        setTimeout(() => setPresenceToast(null), 3000);
-      }
-    }, 12000);
-
-    return () => clearInterval(interval);
-  }, [activeRoom]);
-
   const triggerFloatingReaction = (emoji: string, count = 1) => {
     const newReaction: FloatingReaction = {
       id: `react-${Date.now()}-${Math.random()}`,
@@ -180,18 +148,20 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const joinRoom = (codeOrId: string): boolean => {
-    const clean = codeOrId.replace('#', '').trim().toLowerCase();
+    const clean = codeOrId.replace('#', '').trim().toUpperCase();
     const found = roomsList.find(
-      (r) => r.id.toLowerCase() === clean || r.code.toLowerCase() === clean
+      (r) => r.id.toUpperCase() === clean || r.code.toUpperCase() === clean
     );
 
     if (found) {
       sessionStartTimeRef.current = Date.now();
       reactionCountRef.current = 0;
       setActiveRoom(found);
-      playTrack(found.currentTrack);
+      if (found.currentTrack) {
+        playTrack(found.currentTrack);
+      }
       setSyncStatus('synced');
-      setPresenceToast(`Connected to ${found.name} in synchronized audio!`);
+      setPresenceToast(`Connected to ${found.name}! 🎧`);
       setTimeout(() => setPresenceToast(null), 4000);
       return true;
     }
@@ -200,48 +170,23 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const createRoom = (
     name: string,
-    mode: Room['mode'] = 'democratic',
-    description = 'Late night vibe session with friends'
+    mode: Room['mode'] = 'democratic'
   ): Room => {
     const me = getActiveUser();
-    const newCode = String(Math.floor(1000 + Math.random() * 9000));
-    const activeTrack = currentTrack || {
-      id: `session-track-${Date.now()}`,
-      title: 'VibeRoom Live Sync',
-      artist: me.name,
-      album: 'Live Session',
-      duration: 180,
-      accentColor: '#FF3D81',
-      secondaryColor: '#8B5CF6',
-      artworkSvg: '',
-      genre: 'Social Sync',
-      bpm: 120,
-      energy: 85,
-      plays: 1,
-      likes: 1,
-      lyrics: [],
-    };
+    const newCode = generateUniqueRoomCode(roomsList);
 
     const newRoom: Room = {
       id: `room-${Date.now()}`,
       name,
       code: newCode,
-      description,
+      description: '',
       host: me,
       mode,
       participants: [{ user: me, role: 'host' }],
-      currentTrack: activeTrack,
+      currentTrack: null,
       queue: [],
       history: [],
-      chatMessages: [
-        {
-          id: `msg-${Date.now()}`,
-          sender: me,
-          type: 'text',
-          content: `Welcome to ${name}! Ready to vibe together 🎵`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ],
+      chatMessages: [],
       isLive: true,
       listenerCount: 1,
     };
@@ -250,9 +195,6 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sessionStartTimeRef.current = Date.now();
     reactionCountRef.current = 0;
     setActiveRoom(newRoom);
-    if (newRoom.currentTrack) {
-      playTrack(newRoom.currentTrack);
-    }
     setSyncStatus('synced');
     setIsCreateModalOpen(false);
     return newRoom;
@@ -264,9 +206,9 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSessionSummary({
         roomName: activeRoom.name,
         durationMinutes: elapsedMinutes,
-        songsPlayedCount: activeRoom.history.length + 1,
-        topArtist: activeRoom.currentTrack?.artist || 'Featured Artist',
-        totalReactions: Math.max(12, reactionCountRef.current),
+        songsPlayedCount: activeRoom.history.length + (activeRoom.currentTrack ? 1 : 0),
+        topArtist: activeRoom.currentTrack?.artist || 'Room Host',
+        totalReactions: reactionCountRef.current,
         participantsCount: activeRoom.participants.length,
       });
     }
@@ -303,30 +245,75 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
     triggerFloatingReaction(voteType === 'up' ? '❤️' : '👎', 1);
   };
 
-  const suggestSong = (track: Track) => {
+  const playRoomSong = (track: Track) => {
     if (!activeRoom) return;
+    setActiveRoom((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        currentTrack: track,
+      };
+    });
+    playTrack(track);
+    setIsSuggestModalOpen(false);
+    setPresenceToast(`Now playing: "${track.title}" 🎵`);
+    setTimeout(() => setPresenceToast(null), 3000);
+  };
 
+  const playNextSong = (track: Track) => {
+    if (!activeRoom) return;
+    if (!activeRoom.currentTrack) {
+      playRoomSong(track);
+      return;
+    }
     const me = getActiveUser();
     const newItem: QueueItem = {
-      id: `q-${Date.now()}`,
+      id: `q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       track,
       addedBy: me,
       votes: 1,
       votedByUserIds: [me.id],
     };
-
     setActiveRoom((prev) => {
       if (!prev) return null;
-      const updated = [...prev.queue, newItem];
-      updated.sort((a, b) => b.votes - a.votes);
-      return { ...prev, queue: updated };
+      return {
+        ...prev,
+        queue: [newItem, ...prev.queue],
+      };
     });
-
-    // Also notify chat with a music card
-    sendMessage(`Suggested "${track.title}" to the queue`, 'song_card', track);
     setIsSuggestModalOpen(false);
-    setPresenceToast(`Suggested "${track.title}" to the room queue!`);
+    setPresenceToast(`Set "${track.title}" to play next`);
     setTimeout(() => setPresenceToast(null), 3000);
+  };
+
+  const addToRoomQueue = (track: Track) => {
+    if (!activeRoom) return;
+    if (!activeRoom.currentTrack) {
+      playRoomSong(track);
+      return;
+    }
+    const me = getActiveUser();
+    const newItem: QueueItem = {
+      id: `q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      track,
+      addedBy: me,
+      votes: 1,
+      votedByUserIds: [me.id],
+    };
+    setActiveRoom((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        queue: [...prev.queue, newItem],
+      };
+    });
+    setIsSuggestModalOpen(false);
+    setPresenceToast(`Added "${track.title}" to queue`);
+    setTimeout(() => setPresenceToast(null), 3000);
+  };
+
+  const suggestSong = (track: Track) => {
+    addToRoomQueue(track);
   };
 
   const removeQueueSong = (queueItemId: string) => {
@@ -373,7 +360,7 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const syncNow = () => {
     setSyncStatus('syncing');
-    if (activeRoom) {
+    if (activeRoom && activeRoom.currentTrack) {
       playTrack(activeRoom.currentTrack);
     }
     setTimeout(() => {
@@ -408,6 +395,9 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
         leaveRoom,
         voteSong,
         suggestSong,
+        playRoomSong,
+        playNextSong,
+        addToRoomQueue,
         removeQueueSong,
         sendMessage,
         sendReaction,

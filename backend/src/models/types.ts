@@ -89,7 +89,7 @@ export interface Room {
   mode: 'private' | 'friends' | 'public' | 'radio';
   controlMode: 'host_only' | 'everyone';
   hostId: string;
-  currentSong: Song;
+  currentSong: Song | null;
   isPlaying: boolean;
   positionMs: number;
   serverTimestamp: number;

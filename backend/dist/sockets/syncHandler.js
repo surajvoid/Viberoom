@@ -55,7 +55,7 @@ export function registerSocketHandlers(io) {
                     isPlaying: true,
                     positionMs: updatedRoom.positionMs,
                     serverTimestamp: updatedRoom.serverTimestamp,
-                    songId: updatedRoom.currentSong.id,
+                    songId: updatedRoom.currentSong?.id || '',
                     updatedBy: payload.userId,
                 });
             }
@@ -69,7 +69,7 @@ export function registerSocketHandlers(io) {
                     isPlaying: false,
                     positionMs: updatedRoom.positionMs,
                     serverTimestamp: updatedRoom.serverTimestamp,
-                    songId: updatedRoom.currentSong.id,
+                    songId: updatedRoom.currentSong?.id || '',
                     updatedBy: payload.userId,
                 });
             }
