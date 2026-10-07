@@ -935,6 +935,17 @@ export const CONTEXTUAL_SOUNDSCAPES: ContextualSoundscape[] = [
   },
 ];
 
+import { resolveAudioUrlForTrack } from './audioStreamService.js';
+
+// Populate verified audioUrl on all soundscape tracks for continuous mobile background playback
+CONTEXTUAL_SOUNDSCAPES.forEach((soundscape) => {
+  soundscape.tracks.forEach((track) => {
+    if (!track.audioUrl) {
+      track.audioUrl = resolveAudioUrlForTrack(track);
+    }
+  });
+});
+
 // Helper to look up a soundscape by keyword
 export function findContextualSoundscape(query: string): ContextualSoundscape | null {
   const clean = query.trim().toLowerCase();
@@ -952,3 +963,4 @@ export function findContextualSoundscape(query: string): ContextualSoundscape | 
   }
   return null;
 }
+

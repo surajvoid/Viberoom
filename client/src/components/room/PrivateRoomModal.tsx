@@ -241,7 +241,7 @@ export const PrivateRoomModal: React.FC = () => {
                 <div className="w-full max-w-2xl aspect-video rounded-card overflow-hidden shadow-2xl border border-app-border/60 bg-black relative flex items-center justify-center">
                   {resolvedYoutubeId ? (
                     <iframe
-                      src={`https://www.youtube-nocookie.com/embed/${resolvedYoutubeId}?autoplay=1&enablejsapi=1`}
+                      src={`https://www.youtube-nocookie.com/embed/${resolvedYoutubeId}?autoplay=1&mute=1&playsinline=1&enablejsapi=1`}
                       title={activeRoom.currentTrack.title}
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen

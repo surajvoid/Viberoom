@@ -160,7 +160,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({ onStartRoom })
                   {currentTrack.youtubeId ? (
                     <div className="w-full max-w-lg aspect-video rounded-card overflow-hidden shadow-2xl border border-app-border bg-black">
                       <iframe
-                        src={`https://www.youtube-nocookie.com/embed/${currentTrack.youtubeId}?autoplay=1&enablejsapi=1`}
+                        src={`https://www.youtube-nocookie.com/embed/${currentTrack.youtubeId}?autoplay=1&mute=1&playsinline=1&enablejsapi=1`}
                         title={currentTrack.title}
                         allow="autoplay; encrypted-media"
                         className="w-full h-full border-0"

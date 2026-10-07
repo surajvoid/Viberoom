@@ -37,6 +37,8 @@ export interface SearchResults {
   source: 'youtube' | 'catalog' | 'hybrid';
 }
 
+import { resolveAudioUrlForTrack } from './audioStreamService.js';
+
 // Convert YouTube API item to first-class Track object
 export function convertYouTubeVideoToTrack(ytVideo: any): Track {
   const { primary, secondary } = hashStringToAccent(ytVideo.title || 'Music');
@@ -69,7 +71,7 @@ export function convertYouTubeVideoToTrack(ytVideo: any): Track {
     plays: Math.floor(Math.random() * 2000000) + 500000,
     likes: Math.floor(Math.random() * 150000) + 12000,
     lyrics,
-    audioUrl: ytVideo.audioUrl || undefined,
+    audioUrl: resolveAudioUrlForTrack(ytVideo),
   };
 }
 

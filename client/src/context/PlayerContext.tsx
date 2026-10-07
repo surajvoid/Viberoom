@@ -7,6 +7,7 @@ import {
   registerMediaSessionHandlers,
   updateMediaSessionState,
 } from '../services/backgroundAudioService.js';
+import { ensureTrackAudioUrl, resolveAudioUrlForTrack } from '../services/audioStreamService.js';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -296,22 +297,22 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 if (event.data === 1) {
                   setIsPlaying(true);
                   ensureAudioCarrier(true);
+                  if (nativeAudioRef.current && nativeAudioRef.current.paused && currentTrackRef.current?.audioUrl) {
+                    nativeAudioRef.current.play().catch(() => {});
+                  }
                 } else if (event.data === 2) {
                   // If phone screen locked or tab switched (visibilityState === 'hidden')
                   if (document.visibilityState === 'hidden' && isPlayingRef.current) {
+                    // Critical for Mobile: Phone screen turned off or user switched apps/tabs.
+                    // Keep isPlaying true so MediaSession stays active on the lock screen!
+                    // Ensure native HTML5 audio stream continues playing uninterrupted:
                     ensureAudioCarrier(true);
-                    try {
-                      ytPlayerRef.current?.playVideo();
-                    } catch (e) {}
-
-                    // Cleanly update lock-screen playbackState to paused so the Lock Screen
-                    // and Control Center display the [▶ Play] button!
-                    // When the user taps Play or headphone button, MediaSession onPlay handler
-                    // executes as a trusted user action and resumes playback with screen locked.
-                    setIsPlaying(false);
+                    if (nativeAudioRef.current && nativeAudioRef.current.paused) {
+                      nativeAudioRef.current.play().catch(() => {});
+                    }
                     if ('mediaSession' in navigator) {
                       try {
-                        navigator.mediaSession.playbackState = 'paused';
+                        navigator.mediaSession.playbackState = 'playing';
                       } catch (e) {}
                     }
                     return;
@@ -404,40 +405,41 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Phone screen off, sleep mode, or user switched apps/tabs
         if (isPlayingRef.current) {
           ensureAudioCarrier(true);
-          // If browser momentarily paused playback upon backgrounding, auto-resume immediately
-          setTimeout(() => {
-            if (isPlayingRef.current) {
-              if (currentTrackRef.current?.audioUrl && nativeAudioRef.current) {
-                if (nativeAudioRef.current.paused) {
-                  nativeAudioRef.current.play().catch(() => {});
-                }
-              } else if (ytPlayerRef.current) {
-                try {
-                  const state = ytPlayerRef.current.getPlayerState?.();
-                  if (state === 2) {
-                    ytPlayerRef.current.playVideo();
-                  }
-                } catch (e) {}
-              }
-            }
-          }, 150);
+          // Keep native HTML5 audio stream alive continuously
+          if (nativeAudioRef.current && nativeAudioRef.current.paused) {
+            nativeAudioRef.current.play().catch(() => {});
+          }
+          if ('mediaSession' in navigator) {
+            try {
+              navigator.mediaSession.playbackState = 'playing';
+            } catch (e) {}
+          }
         }
       } else {
         // Returned to foreground / screen turned back on
         if (isPlayingRef.current) {
-          if (currentTrackRef.current?.audioUrl && nativeAudioRef.current) {
+          if (nativeAudioRef.current) {
             if (nativeAudioRef.current.paused) {
               nativeAudioRef.current.play().catch(() => {});
+            }
+            // Seamlessly catch up YouTube player to exact audio position after screen was off
+            if (ytPlayerRef.current && ytReadyRef.current) {
+              try {
+                const cur = nativeAudioRef.current.currentTime;
+                if (!isNaN(cur) && cur > 0) {
+                  ytPlayerRef.current.seekTo(cur, true);
+                }
+                const state = ytPlayerRef.current.getPlayerState?.();
+                if (state !== 1) {
+                  ytPlayerRef.current.playVideo();
+                }
+              } catch (e) {}
             }
           } else if (ytPlayerRef.current) {
             try {
               const state = ytPlayerRef.current.getPlayerState?.();
               if (state !== 1) {
                 ytPlayerRef.current.playVideo();
-              }
-              const cur = ytPlayerRef.current.getCurrentTime?.();
-              if (typeof cur === 'number' && !isNaN(cur)) {
-                setCurrentTime(cur);
               }
             } catch (e) {}
           }
@@ -515,6 +517,19 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     if (isPlaying && currentTrack) {
       intervalRef.current = setInterval(() => {
+        // Native audio is the authoritative source for background and screen-off playback
+        if (nativeAudioRef.current && !nativeAudioRef.current.paused) {
+          const cur = nativeAudioRef.current.currentTime;
+          const dur = nativeAudioRef.current.duration;
+          if (typeof cur === 'number' && !isNaN(cur)) {
+            setCurrentTime(cur);
+          }
+          if (typeof dur === 'number' && dur > 0 && !isNaN(dur)) {
+            setDuration(dur);
+          }
+          return;
+        }
+
         if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
           try {
             const cur = ytPlayerRef.current.getCurrentTime();
@@ -611,42 +626,40 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         ) || similar[0];
 
       if (candidate) {
+        const candidateWithAudio = ensureTrackAudioUrl(candidate);
         ensureAudioCarrier(true);
         setHistory((prev) => [track, ...prev]);
-        setCurrentTrack(candidate);
-        setDuration(candidate.duration || 180);
+        setCurrentTrack(candidateWithAudio);
+        setDuration(candidateWithAudio.duration || 180);
         setCurrentTime(0);
         setIsPlaying(true);
 
         const remaining = similar
           .filter(
             (t) =>
-              t.id.toLowerCase() !== candidate.id.toLowerCase() &&
-              (!t.youtubeId || !candidate.youtubeId || t.youtubeId !== candidate.youtubeId)
+              t.id.toLowerCase() !== candidateWithAudio.id.toLowerCase() &&
+              (!t.youtubeId || !candidateWithAudio.youtubeId || t.youtubeId !== candidateWithAudio.youtubeId)
           )
           .slice(0, 6);
         setQueue(remaining);
 
-        if (candidate.audioUrl) {
-          const audio = getNativeAudio();
-          if (audio) {
-            audio.src = candidate.audioUrl;
-            audio.currentTime = 0;
-            audio.volume = isMuted ? 0 : volume;
-            audio.play().catch(() => {});
-          }
-          if (ytReadyRef.current && ytPlayerRef.current) {
-            try {
-              ytPlayerRef.current.pauseVideo();
-            } catch (e) {}
-          }
-        } else if (candidate.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
-          if (nativeAudioRef.current) {
-            nativeAudioRef.current.pause();
-          }
+        const audio = getNativeAudio();
+        if (audio && candidateWithAudio.audioUrl) {
+          audio.src = candidateWithAudio.audioUrl;
+          audio.currentTime = 0;
+          audio.volume = isMuted ? 0 : volume;
+          audio.play().catch(() => {});
+        }
+        if (candidateWithAudio.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
           try {
-            ytPlayerRef.current.loadVideoById(candidate.youtubeId);
+            ytPlayerRef.current.loadVideoById(candidateWithAudio.youtubeId);
+            ytPlayerRef.current.setVolume(candidateWithAudio.audioUrl ? 0 : volume * 100);
             ytPlayerRef.current.playVideo();
+          } catch (e) {}
+        }
+        if ('mediaSession' in navigator) {
+          try {
+            navigator.mediaSession.playbackState = 'playing';
           } catch (e) {}
         }
         return;
@@ -673,7 +686,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (current.audioUrl && nativeAudioRef.current) {
         nativeAudioRef.current.currentTime = 0;
         nativeAudioRef.current.play().catch(() => {});
-      } else if (current.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+      }
+      if (current.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.seekTo(0, true);
           ytPlayerRef.current.playVideo();
@@ -684,7 +698,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     if (currentQueue.length > 0) {
       ensureAudioCarrier(true);
-      const next = currentQueue[0];
+      const next = ensureTrackAudioUrl(currentQueue[0]);
       if (current) {
         setHistory((prev) => [current, ...prev]);
       }
@@ -694,26 +708,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCurrentTime(0);
       setIsPlaying(true);
 
-      if (next.audioUrl) {
-        const audio = getNativeAudio();
-        if (audio) {
-          audio.src = next.audioUrl;
-          audio.currentTime = 0;
-          audio.volume = isMuted ? 0 : volume;
-          audio.play().catch(() => {});
-        }
-        if (ytReadyRef.current && ytPlayerRef.current) {
-          try {
-            ytPlayerRef.current.pauseVideo();
-          } catch (e) {}
-        }
-      } else if (next.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
-        if (nativeAudioRef.current) {
-          nativeAudioRef.current.pause();
-        }
+      const audio = getNativeAudio();
+      if (audio && next.audioUrl) {
+        audio.src = next.audioUrl;
+        audio.currentTime = 0;
+        audio.volume = isMuted ? 0 : volume;
+        audio.play().catch(() => {});
+      }
+      if (next.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.loadVideoById(next.youtubeId);
+          ytPlayerRef.current.setVolume(next.audioUrl ? 0 : volume * 100);
           ytPlayerRef.current.playVideo();
+        } catch (e) {}
+      }
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.playbackState = 'playing';
         } catch (e) {}
       }
 
@@ -747,76 +758,54 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const playTrack = (track: Track) => {
     if (!track) return;
+    const targetTrack = ensureTrackAudioUrl(track);
     ensureAudioCarrier(true);
-    if (!currentTrack || track.id !== currentTrack.id) {
+    if (!currentTrack || targetTrack.id !== currentTrack.id) {
       if (currentTrack) {
         setHistory((prev) => [currentTrack, ...prev]);
       }
-      setCurrentTrack(track);
-      setDuration(track.duration || 180);
+      setCurrentTrack(targetTrack);
+      setDuration(targetTrack.duration || 180);
       setCurrentTime(0);
-      setQueue((prev) => prev.filter((t) => t.id !== track.id));
+      setQueue((prev) => prev.filter((t) => t.id !== targetTrack.id));
 
-      if (track.audioUrl) {
+      if (targetTrack.audioUrl) {
         const audio = getNativeAudio();
         if (audio) {
-          audio.src = track.audioUrl;
+          audio.src = targetTrack.audioUrl;
           audio.currentTime = 0;
           audio.volume = isMuted ? 0 : volume;
           audio.play().catch(() => {});
         }
-        if (ytReadyRef.current && ytPlayerRef.current) {
-          try {
-            ytPlayerRef.current.pauseVideo();
-          } catch (e) {}
-        }
-      } else if (track.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
-        if (nativeAudioRef.current) {
-          nativeAudioRef.current.pause();
-        }
+      }
+
+      if (targetTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
-          ytPlayerRef.current.loadVideoById(track.youtubeId);
+          ytPlayerRef.current.loadVideoById(targetTrack.youtubeId);
+          // Mute YouTube player when native audio is active so user gets 1 crystal-clear stream
+          ytPlayerRef.current.setVolume(targetTrack.audioUrl ? 0 : volume * 100);
           ytPlayerRef.current.playVideo();
         } catch (e) {}
       }
 
       // Proactively fetch and queue similar tracks for seamless continuous playback
-      prefetchSimilarTracks(track);
+      prefetchSimilarTracks(targetTrack);
     } else {
-      if (track.audioUrl && nativeAudioRef.current) {
+      if (targetTrack.audioUrl && nativeAudioRef.current) {
         nativeAudioRef.current.play().catch(() => {});
-      } else if (track.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+      }
+      if (targetTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.playVideo();
         } catch (e) {}
       }
     }
     setIsPlaying(true);
-  };
-
-  const togglePlay = () => {
-    if (!currentTrack) return;
-    setIsPlaying((prev) => {
-      const nextState = !prev;
-      ensureAudioCarrier(nextState);
-      if (currentTrack.audioUrl) {
-        const audio = getNativeAudio();
-        if (nextState) {
-          audio?.play().catch(() => {});
-        } else {
-          audio?.pause();
-        }
-      } else if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
-        try {
-          if (nextState) {
-            ytPlayerRef.current.playVideo();
-          } else {
-            ytPlayerRef.current.pauseVideo();
-          }
-        } catch (e) {}
-      }
-      return nextState;
-    });
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.playbackState = 'playing';
+      } catch (e) {}
+    }
   };
 
   const pause = () => {
@@ -826,9 +815,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (nativeAudioRef.current) {
       nativeAudioRef.current.pause();
     }
-    if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+    if (ytReadyRef.current && ytPlayerRef.current) {
       try {
         ytPlayerRef.current.pauseVideo();
+      } catch (e) {}
+    }
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.playbackState = 'paused';
       } catch (e) {}
     }
   };
@@ -837,13 +831,30 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentTrack) return;
     setIsPlaying(true);
     ensureAudioCarrier(true);
-    if (currentTrack.audioUrl) {
-      const audio = getNativeAudio();
-      audio?.play().catch(() => {});
-    } else if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+    if (nativeAudioRef.current) {
+      nativeAudioRef.current.play().catch(() => {});
+    }
+    if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
       try {
+        if (nativeAudioRef.current && !isNaN(nativeAudioRef.current.currentTime)) {
+          ytPlayerRef.current.seekTo(nativeAudioRef.current.currentTime, true);
+        }
         ytPlayerRef.current.playVideo();
       } catch (e) {}
+    }
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.playbackState = 'playing';
+      } catch (e) {}
+    }
+  };
+
+  const togglePlay = () => {
+    if (!currentTrack) return;
+    if (isPlaying) {
+      pause();
+    } else {
+      resume();
     }
   };
 
@@ -853,9 +864,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const targetSeconds = clamped * duration;
     setCurrentTime(targetSeconds);
 
-    if (currentTrack.audioUrl && nativeAudioRef.current) {
+    if (nativeAudioRef.current) {
       nativeAudioRef.current.currentTime = targetSeconds;
-    } else if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+    }
+    if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
       try {
         ytPlayerRef.current.seekTo(targetSeconds, true);
       } catch (e) {}
@@ -872,44 +884,22 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     ensureAudioCarrier(true);
     if (currentTime > 3 || history.length === 0) {
       setCurrentTime(0);
-      if (currentTrack.audioUrl && nativeAudioRef.current) {
+      if (nativeAudioRef.current) {
         nativeAudioRef.current.currentTime = 0;
         nativeAudioRef.current.play().catch(() => {});
-      } else if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
+      }
+      if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.seekTo(0, true);
+          ytPlayerRef.current.playVideo();
         } catch (e) {}
       }
     } else {
       const prev = history[0];
       setHistory((h) => h.slice(1));
-      setQueue((q) => [currentTrack, ...q]);
-      setCurrentTrack(prev);
-      setDuration(prev.duration || 180);
-      setCurrentTime(0);
-      setIsPlaying(true);
-
-      if (prev.audioUrl) {
-        const audio = getNativeAudio();
-        if (audio) {
-          audio.src = prev.audioUrl;
-          audio.currentTime = 0;
-          audio.volume = isMuted ? 0 : volume;
-          audio.play().catch(() => {});
-        }
-        if (ytReadyRef.current && ytPlayerRef.current) {
-          try {
-            ytPlayerRef.current.pauseVideo();
-          } catch (e) {}
-        }
-      } else if (prev.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
-        if (nativeAudioRef.current) {
-          nativeAudioRef.current.pause();
-        }
-        try {
-          ytPlayerRef.current.loadVideoById(prev.youtubeId);
-          ytPlayerRef.current.playVideo();
-        } catch (e) {}
+      if (prev) {
+        setQueue((q) => [currentTrack, ...q]);
+        playTrack(prev);
       }
     }
   };
