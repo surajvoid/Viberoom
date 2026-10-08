@@ -542,7 +542,125 @@ export const MOCK_ARTISTS: Artist[] = [
 // Curated Rooms (Discord-style social music hangout)
 // ============================================================================
 
-export const MOCK_ROOMS: Room[] = [];
+export const MOCK_ROOMS: Room[] = [
+  {
+    id: 'room-late-night-bollywood',
+    name: 'Late Night Acoustic & Romance',
+    code: '8492',
+    description: 'Stephen Sanchez, Arijit Singh, intimate acoustic & midnight chartbusters synced live',
+    host: MOCK_SOCIAL_USERS[0],
+    mode: 'democratic',
+    participants: [
+      { user: MOCK_SOCIAL_USERS[0], role: 'host' },
+      { user: MOCK_SOCIAL_USERS[1], role: 'listener' },
+      { user: MOCK_SOCIAL_USERS[2], role: 'listener' },
+    ],
+    currentTrack: MOCK_TRACKS[1],
+    queue: [
+      {
+        id: 'q-1',
+        track: MOCK_TRACKS[0],
+        addedBy: MOCK_SOCIAL_USERS[1],
+        votes: 5,
+        votedByUserIds: [MOCK_SOCIAL_USERS[1].id],
+      },
+      {
+        id: 'q-2',
+        track: MOCK_TRACKS[2],
+        addedBy: MOCK_SOCIAL_USERS[2],
+        votes: 3,
+        votedByUserIds: [MOCK_SOCIAL_USERS[2].id],
+      },
+    ],
+    history: [],
+    chatMessages: [
+      {
+        id: 'm-1',
+        sender: MOCK_SOCIAL_USERS[1],
+        type: 'text',
+        content: 'This acoustic version gives me chills ✨',
+        timestamp: '10:42 PM',
+      },
+      {
+        id: 'm-2',
+        sender: MOCK_SOCIAL_USERS[0],
+        type: 'text',
+        content: 'Welcome everyone! Upvote the next track in the queue 🎵',
+        timestamp: '10:43 PM',
+      },
+    ],
+    isLive: true,
+    listenerCount: 14,
+  },
+  {
+    id: 'room-midnight-synthwave',
+    name: 'Midnight Synthwave & Cyber Vibe',
+    code: 'MX7K2P',
+    description: 'Retro 80s synth, electronic drive & late-night chillout with visual music video',
+    host: MOCK_SOCIAL_USERS[1],
+    mode: 'dj',
+    participants: [
+      { user: MOCK_SOCIAL_USERS[1], role: 'host' },
+      { user: MOCK_SOCIAL_USERS[2], role: 'listener' },
+    ],
+    currentTrack: MOCK_TRACKS[0],
+    queue: [
+      {
+        id: 'q-3',
+        track: MOCK_TRACKS[2],
+        addedBy: MOCK_SOCIAL_USERS[2],
+        votes: 4,
+        votedByUserIds: [MOCK_SOCIAL_USERS[2].id],
+      },
+    ],
+    history: [],
+    chatMessages: [
+      {
+        id: 'm-3',
+        sender: MOCK_SOCIAL_USERS[1],
+        type: 'text',
+        content: 'Synth bass hitting so clean tonight ⚡',
+        timestamp: '10:45 PM',
+      },
+    ],
+    isLive: true,
+    listenerCount: 8,
+  },
+  {
+    id: 'room-lofi-chill',
+    name: 'Lo-Fi Chill & Study Beats',
+    code: '5120',
+    description: 'Relaxing beats to study, code, and wind down together',
+    host: MOCK_SOCIAL_USERS[2],
+    mode: 'chill',
+    participants: [
+      { user: MOCK_SOCIAL_USERS[2], role: 'host' },
+      { user: MOCK_SOCIAL_USERS[0], role: 'listener' },
+    ],
+    currentTrack: MOCK_TRACKS[2],
+    queue: [
+      {
+        id: 'q-4',
+        track: MOCK_TRACKS[1],
+        addedBy: MOCK_SOCIAL_USERS[0],
+        votes: 2,
+        votedByUserIds: [MOCK_SOCIAL_USERS[0].id],
+      },
+    ],
+    history: [],
+    chatMessages: [
+      {
+        id: 'm-4',
+        sender: MOCK_SOCIAL_USERS[2],
+        type: 'text',
+        content: 'Pure flow state vibes 🎧',
+        timestamp: '10:40 PM',
+      },
+    ],
+    isLive: true,
+    listenerCount: 19,
+  },
+];
 
 // ============================================================================
 // Curated GIFs (Animated vector SVGs)

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext.js';
 import { AuthProvider, useAuth } from './context/AuthContext.js';
-import { PlayerProvider } from './context/PlayerContext.js';
-import { RoomProvider } from './context/RoomContext.js';
+import { PlayerProvider, usePlayer } from './context/PlayerContext.js';
+import { RoomProvider, useRoom } from './context/RoomContext.js';
 import { AuthScreen } from './screens/auth/AuthScreen.js';
 import { BottomNavigation, NavigationTab } from './components/navigation/BottomNavigation.js';
 import { DesktopSidebar } from './components/navigation/DesktopSidebar.js';
@@ -23,6 +23,8 @@ import { Smartphone, Monitor, Volume2 } from 'lucide-react';
 
 const ShellLayout: React.FC = () => {
   const { currentUser, isAuthenticated, isLoading } = useAuth();
+  const { currentTrack } = usePlayer();
+  const { activeRoom, createRoom, setIsCreateModalOpen, openRoomModal } = useRoom();
   const [currentTab, setCurrentTab] = useState<NavigationTab>('home');
   const [isMobileFramePreview, setIsMobileFramePreview] = useState(false);
   const [isFriendsActivityOpen, setIsFriendsActivityOpen] = useState(false);
@@ -140,7 +142,17 @@ const ShellLayout: React.FC = () => {
           <MiniPlayer />
 
           {/* Cinematic Now Playing Full Screen Modal */}
-          <NowPlayingModal onStartRoom={() => setCurrentTab('rooms')} />
+          <NowPlayingModal
+            onStartRoom={() => {
+              if (activeRoom) {
+                openRoomModal();
+              } else if (currentTrack) {
+                createRoom(`${currentTrack.title} Vibe`, 'democratic', currentTrack);
+              } else {
+                setIsCreateModalOpen(true);
+              }
+            }}
+          />
 
           {/* Real-Time Private Social Room Full Screen Modal */}
           <PrivateRoomModal />

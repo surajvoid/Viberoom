@@ -43,10 +43,14 @@ const GENRE_STREAM_MAP: Record<string, string> = {
 export function resolveAudioUrlForTrack(track: Partial<Track> | null | undefined): string {
   if (!track) return LOCAL_AUDIO_STREAMS[0];
 
-  // If already has a valid same-origin or working audio URL (that is not a broken Pixabay CDN link)
+  // If already has a valid same-origin or working audio URL
   if (track.audioUrl && typeof track.audioUrl === 'string' && track.audioUrl.trim().length > 0) {
-    if (!track.audioUrl.includes('pixabay.com')) {
-      return track.audioUrl;
+    const trimmed = track.audioUrl.trim();
+    if (LOCAL_AUDIO_STREAMS.includes(trimmed)) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('http') && !trimmed.includes('pixabay.com')) {
+      return trimmed;
     }
   }
 

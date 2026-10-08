@@ -23,6 +23,7 @@ import {
   Search,
   Youtube,
   Loader2,
+  ChevronDown,
 } from 'lucide-react';
 import { useRoom } from '../../context/RoomContext.js';
 import { usePlayer } from '../../context/PlayerContext.js';
@@ -43,6 +44,8 @@ export const PrivateRoomModal: React.FC = () => {
   const currentUserId = currentUser?.id || 'me';
   const {
     activeRoom,
+    isRoomModalOpen,
+    setIsRoomModalOpen,
     leaveRoom,
     voteSong,
     removeQueueSong,
@@ -99,7 +102,7 @@ export const PrivateRoomModal: React.FC = () => {
     };
   }, [activeRoom?.currentTrack]);
 
-  if (!activeRoom) return null;
+  if (!activeRoom || !isRoomModalOpen) return null;
 
   const handleCopyCode = () => {
     if (!activeRoom?.code) return;
@@ -167,7 +170,7 @@ export const PrivateRoomModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Sync status & Leave Room Actions */}
+          {/* Sync status, Minimize & Leave Room Actions */}
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={syncNow}
@@ -183,6 +186,14 @@ export const PrivateRoomModal: React.FC = () => {
                 className={syncStatus === 'syncing' ? 'animate-spin' : ''}
               />
               <span>{syncStatus === 'synced' ? 'SYNCED' : 'SYNC NOW'}</span>
+            </button>
+
+            <button
+              onClick={() => setIsRoomModalOpen(false)}
+              title="Minimize room (keep listening in background)"
+              className="p-1.5 rounded-chip bg-app-elevated hover:bg-app-accent/20 hover:text-app-accent border border-app-border text-app-muted transition-colors flex items-center justify-center"
+            >
+              <ChevronDown size={18} />
             </button>
 
             <button
@@ -445,26 +456,26 @@ export const PrivateRoomModal: React.FC = () => {
                             <span className="text-meta-sm font-mono font-bold text-app-muted w-5 text-center">
                               {String(index + 1).padStart(2, '0')}
                             </span>
-                            {item.track.coverUrl ? (
+                            {item?.track?.coverUrl ? (
                               <img
                                 src={item.track.coverUrl}
-                                alt={item.track.title}
+                                alt={item.track.title || 'Track'}
                                 className="w-10 h-10 rounded-chip object-cover shrink-0"
                               />
                             ) : (
                               <Artwork
-                                src={item.track.artworkSvg}
-                                alt={item.track.title}
+                                src={item?.track?.artworkSvg || ''}
+                                alt={item?.track?.title || 'Track'}
                                 size="xs"
                                 rounded="chip"
                               />
                             )}
                             <div className="min-w-0 flex-1">
                               <p className="text-body font-bold text-app-text truncate">
-                                {item.track.title}
+                                {item?.track?.title || 'Untitled Track'}
                               </p>
                               <p className="text-meta-sm text-app-muted truncate">
-                                {item.track.artist} • Added by {item.addedBy.name}
+                                {item?.track?.artist || 'Unknown Artist'} • Added by {item?.addedBy?.name || 'Listener'}
                               </p>
                             </div>
                           </div>

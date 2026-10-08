@@ -3,6 +3,7 @@ import { Play, Pause, SkipForward, Heart, ChevronUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Artwork } from '../ui/Artwork.js';
 import { usePlayer } from '../../context/PlayerContext.js';
+import { useRoom } from '../../context/RoomContext.js';
 
 export const MiniPlayer: React.FC = () => {
   const {
@@ -18,24 +19,55 @@ export const MiniPlayer: React.FC = () => {
     toggleLike,
     expandPlayer,
   } = usePlayer();
+  const { activeRoom, isRoomModalOpen, openRoomModal } = useRoom();
 
-  if (!currentTrack) return null;
+  if (!currentTrack && !activeRoom) return null;
 
-  const liked = isLiked(currentTrack.id);
+  const liked = currentTrack ? isLiked(currentTrack.id) : false;
 
   return (
     <div
       className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px))] md:bottom-5 left-0 right-0 z-30 px-2.5 sm:px-4 md:px-6 max-w-2xl mx-auto pointer-events-none"
     >
-      <motion.div
-        layoutId="miniPlayerContainer"
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 20, opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-        onClick={expandPlayer}
-        className="pointer-events-auto glass-panel border border-white/10 dark:border-white/5 rounded-card p-2 sm:p-2.5 shadow-soft-2 flex flex-col gap-2 relative overflow-hidden cursor-pointer select-none group hover:border-app-border-strong transition-colors"
-      >
+      {/* Live Social Room Multitasking Bar (shows when user minimized the active room) */}
+      {activeRoom && !isRoomModalOpen && (
+        <motion.div
+          initial={{ y: 8, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 8, opacity: 0 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            openRoomModal();
+          }}
+          className="pointer-events-auto mb-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-[#FF3D81] to-[#8B5CF6] text-white shadow-lg backdrop-blur-md flex items-center justify-between cursor-pointer text-xs font-semibold hover:brightness-110 active:scale-[0.99] transition-all border border-white/20 select-none group"
+        >
+          <div className="flex items-center gap-2 truncate">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+            </span>
+            <span className="truncate font-bold tracking-tight">LIVE ROOM: {activeRoom.name}</span>
+            <span className="font-mono bg-black/25 px-1.5 py-0.5 rounded text-[10px] tracking-wider text-pink-100">
+              #{activeRoom.code}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] shrink-0 font-medium opacity-90 pl-2 group-hover:opacity-100">
+            <span>Reopen Room</span>
+            <ChevronUp size={14} />
+          </div>
+        </motion.div>
+      )}
+
+      {currentTrack && (
+        <motion.div
+          layoutId="miniPlayerContainer"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 20, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+          onClick={expandPlayer}
+          className="pointer-events-auto glass-panel border border-white/10 dark:border-white/5 rounded-card p-2 sm:p-2.5 shadow-soft-2 flex flex-col gap-2 relative overflow-hidden cursor-pointer select-none group hover:border-app-border-strong transition-colors"
+        >
         {/* Seekable Progress Bar along top edge */}
         <div
           onClick={(e) => {
@@ -130,6 +162,7 @@ export const MiniPlayer: React.FC = () => {
           </div>
         </div>
       </motion.div>
+      )}
     </div>
   );
 };

@@ -69,11 +69,18 @@ export const RoomsScreen: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {roomsList.map((room) => {
-              const modeBadge = {
-                democratic: { label: 'Democratic Voting', variant: 'accent' as const },
-                dj: { label: 'Host DJ Mode', variant: 'default' as const },
-                chill: { label: 'Chillout Lounge', variant: 'outline' as const },
-              }[room.mode];
+              const modeMap: Record<string, { label: string; variant: 'accent' | 'default' | 'outline' | 'live' }> = {
+                democratic: { label: 'Democratic Voting', variant: 'accent' },
+                dj: { label: 'Host DJ Mode', variant: 'default' },
+                chill: { label: 'Chillout Lounge', variant: 'outline' },
+                public: { label: 'Public Hangout', variant: 'accent' },
+                private: { label: 'Private Room', variant: 'outline' },
+                friends: { label: 'Friends Only', variant: 'default' },
+              };
+              const modeBadge = modeMap[String(room.mode || 'democratic').toLowerCase()] || {
+                label: 'Democratic Voting',
+                variant: 'accent' as const,
+              };
 
               return (
                 <Card
@@ -109,7 +116,7 @@ export const RoomsScreen: React.FC = () => {
                     {room.currentTrack && (
                       <div className="flex items-center gap-3 bg-app-elevated/40 p-2.5 rounded-chip">
                         <Artwork
-                          src={room.currentTrack.artworkSvg}
+                          src={room.currentTrack.artworkSvg || room.currentTrack.coverUrl || ''}
                           alt={room.currentTrack.title}
                           size="xs"
                           rounded="chip"

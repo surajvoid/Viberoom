@@ -38,7 +38,13 @@ interface HomeScreenProps {
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenRoom, onNavigateTab }) => {
   const { currentUser } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay, progress, expandPlayer } = usePlayer();
-  const { setIsCreateModalOpen, setIsJoinModalOpen } = useRoom();
+  const {
+    setIsCreateModalOpen,
+    setIsJoinModalOpen,
+    activeRoom,
+    createRoom,
+    openRoomModal,
+  } = useRoom();
   const [quickSearch, setQuickSearch] = useState('');
   const [selectedSoundscape, setSelectedSoundscape] = useState<ContextualSoundscape | null>(null);
 
@@ -156,7 +162,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenRoom, onNavigateTa
                     variant="ghost"
                     size="md"
                     icon={<Plus size={18} />}
-                    onClick={() => setIsCreateModalOpen(true)}
+                    onClick={() => {
+                      if (activeRoom) {
+                        openRoomModal();
+                      } else if (currentTrack) {
+                        createRoom(`${currentTrack.title} Lounge`, 'democratic', currentTrack);
+                      } else {
+                        setIsCreateModalOpen(true);
+                      }
+                    }}
                   >
                     Host in Room
                   </Button>
