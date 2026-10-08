@@ -258,7 +258,7 @@ export const MOCK_TRACKS: Track[] = [
     plays: 894000000,
     likes: 12400000,
     youtubeId: 'ygTZZpVHNpc',
-    audioUrl: '/audio/vibe-track-1.mp3',
+    audioUrl: '',
     lyrics: [
       { time: 0, text: '♪ Thought I almost died in my dream again ♪' },
       { time: 24, text: 'Fightin\' for my life, I couldn\'t breathe again' },
@@ -281,7 +281,7 @@ export const MOCK_TRACKS: Track[] = [
     plays: 680000000,
     likes: 9200000,
     youtubeId: 'GxldQ9eX2wo',
-    audioUrl: '/audio/vibe-track-2.mp3',
+    audioUrl: '',
     lyrics: [
       { time: 0, text: '♪ Georgia, wrap me up in all your— ♪' },
       { time: 9, text: 'I want you in my arms' },
@@ -303,7 +303,7 @@ export const MOCK_TRACKS: Track[] = [
     plays: 2150000000,
     likes: 21000000,
     youtubeId: '34Na4j8AVgA',
-    audioUrl: '/audio/vibe-track-3.mp3',
+    audioUrl: '',
     lyrics: [
       { time: 0, text: '♪ I\'m tryna put you in the worst mood, ah ♪' },
       { time: 15, text: 'P1 cleaner than your church shoes, ah' },
@@ -325,7 +325,7 @@ export const MOCK_TRACKS: Track[] = [
     plays: 950000000,
     likes: 11400000,
     youtubeId: 'dX3k_QDnzHE',
-    audioUrl: '/audio/vibe-track-1.mp3',
+    audioUrl: '',
     lyrics: [
       { time: 0, text: '♪ Waiting in a car ♪' },
       { time: 18, text: 'Waiting for a ride in the dark' },
@@ -347,7 +347,7 @@ export const MOCK_TRACKS: Track[] = [
     plays: 540000000,
     likes: 8500000,
     youtubeId: 'UEvOsQBu1jY',
-    audioUrl: '/audio/vibe-track-2.mp3',
+    audioUrl: '',
     lyrics: [
       { time: 0, text: '♪ Tu mera koi na hoke bhi kuch laage ♪' },
       { time: 25, text: 'Apna bana le piya, apna bana le piya' },
@@ -368,7 +368,7 @@ export const MOCK_TRACKS: Track[] = [
     plays: 420000000,
     likes: 5600000,
     youtubeId: 'BddP6PYo2gs',
-    audioUrl: '/audio/vibe-track-3.mp3',
+    audioUrl: '',
     lyrics: [
       { time: 0, text: '♪ Late nights in the city, knowing what\'s done ♪' },
       { time: 14, text: 'Can\'t undo the damage, but we still run' },
@@ -389,7 +389,7 @@ export const MOCK_TRACKS: Track[] = [
     plays: 1200000000,
     likes: 18000000,
     youtubeId: 'jfKfPfyJRdk',
-    audioUrl: '/audio/vibe-track-2.mp3',
+    audioUrl: '',
     lyrics: [
       { time: 0, text: '♪ Cozy rain outside the window ♪' },
       { time: 30, text: 'Warm coffee and mellow keys' },
@@ -410,7 +410,7 @@ export const MOCK_TRACKS: Track[] = [
     plays: 350000000,
     likes: 4200000,
     youtubeId: 'vNwYtllyt3Q',
-    audioUrl: '/audio/vibe-track-3.mp3',
+    audioUrl: '',
     lyrics: [
       { time: 0, text: '♪ Gentle frequencies expanding into space ♪' },
       { time: 60, text: 'Pure focus and flow state' },

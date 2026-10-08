@@ -297,6 +297,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 if (event.data === 1) {
                   setIsPlaying(true);
                   ensureAudioCarrier(true);
+                  try {
+                    event.target.unMute();
+                    event.target.setVolume(isMuted ? 0 : volume * 100);
+                  } catch (e) {}
                   if (nativeAudioRef.current && nativeAudioRef.current.paused && currentTrackRef.current?.audioUrl) {
                     nativeAudioRef.current.play().catch(() => {});
                   }
@@ -304,12 +308,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                   // If phone screen locked or tab switched (visibilityState === 'hidden')
                   if (document.visibilityState === 'hidden' && isPlayingRef.current) {
                     // Critical for Mobile: Phone screen turned off or user switched apps/tabs.
-                    // Keep isPlaying true so MediaSession stays active on the lock screen!
-                    // Ensure native HTML5 audio stream continues playing uninterrupted:
+                    // Keep isPlaying true so MediaSession stays active on the lock screen
                     ensureAudioCarrier(true);
-                    if (nativeAudioRef.current && nativeAudioRef.current.paused) {
-                      nativeAudioRef.current.play().catch(() => {});
-                    }
                     if ('mediaSession' in navigator) {
                       try {
                         navigator.mediaSession.playbackState = 'playing';
@@ -320,7 +320,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                   setIsPlaying(false);
                   ensureAudioCarrier(false);
                 } else if (event.data === 0) {
-                  // User request: auto-play next song similar to that song
+                  // Auto-play next song
                   handleTrackEndRef.current?.();
                 }
               },
@@ -418,30 +418,19 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } else {
         // Returned to foreground / screen turned back on
         if (isPlayingRef.current) {
-          if (nativeAudioRef.current) {
-            if (nativeAudioRef.current.paused) {
-              nativeAudioRef.current.play().catch(() => {});
-            }
-            // Seamlessly catch up YouTube player to exact audio position after screen was off
-            if (ytPlayerRef.current && ytReadyRef.current) {
-              try {
-                const cur = nativeAudioRef.current.currentTime;
-                if (!isNaN(cur) && cur > 0) {
-                  ytPlayerRef.current.seekTo(cur, true);
-                }
-                const state = ytPlayerRef.current.getPlayerState?.();
-                if (state !== 1) {
-                  ytPlayerRef.current.playVideo();
-                }
-              } catch (e) {}
-            }
-          } else if (ytPlayerRef.current) {
+          if (ytPlayerRef.current) {
             try {
               const state = ytPlayerRef.current.getPlayerState?.();
               if (state !== 1) {
+                ytPlayerRef.current.unMute();
+                ytPlayerRef.current.setVolume(isMuted ? 0 : volume * 100);
                 ytPlayerRef.current.playVideo();
               }
             } catch (e) {}
+          } else if (nativeAudioRef.current && currentTrackRef.current?.audioUrl) {
+            if (nativeAudioRef.current.paused) {
+              nativeAudioRef.current.play().catch(() => {});
+            }
           }
         }
       }
@@ -517,19 +506,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     if (isPlaying && currentTrack) {
       intervalRef.current = setInterval(() => {
-        // Native audio is the authoritative source for background and screen-off playback
-        if (nativeAudioRef.current && !nativeAudioRef.current.paused) {
-          const cur = nativeAudioRef.current.currentTime;
-          const dur = nativeAudioRef.current.duration;
-          if (typeof cur === 'number' && !isNaN(cur)) {
-            setCurrentTime(cur);
-          }
-          if (typeof dur === 'number' && dur > 0 && !isNaN(dur)) {
-            setDuration(dur);
-          }
-          return;
-        }
-
+        // YouTube is the authoritative source for real-time video/audio playback
         if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
           try {
             const cur = ytPlayerRef.current.getCurrentTime();
@@ -546,6 +523,19 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
             return;
           } catch (e) {}
+        }
+
+        // Native audio check for custom audio uploads
+        if (nativeAudioRef.current && !nativeAudioRef.current.paused) {
+          const cur = nativeAudioRef.current.currentTime;
+          const dur = nativeAudioRef.current.duration;
+          if (typeof cur === 'number' && !isNaN(cur)) {
+            setCurrentTime(cur);
+          }
+          if (typeof dur === 'number' && dur > 0 && !isNaN(dur)) {
+            setDuration(dur);
+          }
+          return;
         }
 
         // Fallback simulation timer
@@ -643,19 +633,21 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .slice(0, 6);
         setQueue(remaining);
 
-        const audio = getNativeAudio();
-        if (audio && candidateWithAudio.audioUrl) {
-          audio.src = candidateWithAudio.audioUrl;
-          audio.currentTime = 0;
-          audio.volume = isMuted ? 0 : volume;
-          audio.play().catch(() => {});
-        }
         if (candidateWithAudio.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
           try {
             ytPlayerRef.current.loadVideoById(candidateWithAudio.youtubeId);
-            ytPlayerRef.current.setVolume(candidateWithAudio.audioUrl ? 0 : volume * 100);
+            ytPlayerRef.current.unMute();
+            ytPlayerRef.current.setVolume(isMuted ? 0 : volume * 100);
             ytPlayerRef.current.playVideo();
           } catch (e) {}
+        } else if (candidateWithAudio.audioUrl) {
+          const audio = getNativeAudio();
+          if (audio) {
+            audio.src = candidateWithAudio.audioUrl;
+            audio.currentTime = 0;
+            audio.volume = isMuted ? 0 : volume;
+            audio.play().catch(() => {});
+          }
         }
         if ('mediaSession' in navigator) {
           try {
@@ -683,15 +675,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ensureAudioCarrier(true);
       setCurrentTime(0);
       setIsPlaying(true);
-      if (current.audioUrl && nativeAudioRef.current) {
-        nativeAudioRef.current.currentTime = 0;
-        nativeAudioRef.current.play().catch(() => {});
-      }
       if (current.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.seekTo(0, true);
           ytPlayerRef.current.playVideo();
         } catch (e) {}
+      } else if (current.audioUrl && nativeAudioRef.current) {
+        nativeAudioRef.current.currentTime = 0;
+        nativeAudioRef.current.play().catch(() => {});
       }
       return;
     }
@@ -708,19 +699,21 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCurrentTime(0);
       setIsPlaying(true);
 
-      const audio = getNativeAudio();
-      if (audio && next.audioUrl) {
-        audio.src = next.audioUrl;
-        audio.currentTime = 0;
-        audio.volume = isMuted ? 0 : volume;
-        audio.play().catch(() => {});
-      }
       if (next.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.loadVideoById(next.youtubeId);
-          ytPlayerRef.current.setVolume(next.audioUrl ? 0 : volume * 100);
+          ytPlayerRef.current.unMute();
+          ytPlayerRef.current.setVolume(isMuted ? 0 : volume * 100);
           ytPlayerRef.current.playVideo();
         } catch (e) {}
+      } else if (next.audioUrl) {
+        const audio = getNativeAudio();
+        if (audio) {
+          audio.src = next.audioUrl;
+          audio.currentTime = 0;
+          audio.volume = isMuted ? 0 : volume;
+          audio.play().catch(() => {});
+        }
       }
       if ('mediaSession' in navigator) {
         try {
@@ -756,10 +749,19 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Keep handleTrackEnd ref updated
   handleTrackEndRef.current = handleTrackEnd;
 
-  const playTrack = (track: Track) => {
+  const playTrack = async (track: Track) => {
     if (!track) return;
     const targetTrack = ensureTrackAudioUrl(track);
     ensureAudioCarrier(true);
+
+    // Stop and clear native audio element so NO default/leftover audio plays
+    if (nativeAudioRef.current && !targetTrack.audioUrl) {
+      try {
+        nativeAudioRef.current.pause();
+        nativeAudioRef.current.src = '';
+      } catch {}
+    }
+
     if (!currentTrack || targetTrack.id !== currentTrack.id) {
       if (currentTrack) {
         setHistory((prev) => [currentTrack, ...prev]);
@@ -769,7 +771,26 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCurrentTime(0);
       setQueue((prev) => prev.filter((t) => t.id !== targetTrack.id));
 
-      if (targetTrack.audioUrl) {
+      // Resolve authentic YouTube video ID in real time if not already present
+      let finalYtId = targetTrack.youtubeId;
+      if (!finalYtId && !targetTrack.audioUrl) {
+        try {
+          const results = await searchYouTube(`${targetTrack.title} ${targetTrack.artist}`);
+          if (results.length > 0 && results[0].youtubeId) {
+            finalYtId = results[0].youtubeId;
+            targetTrack.youtubeId = finalYtId;
+          }
+        } catch {}
+      }
+
+      if (finalYtId && ytReadyRef.current && ytPlayerRef.current) {
+        try {
+          ytPlayerRef.current.loadVideoById(finalYtId);
+          ytPlayerRef.current.unMute();
+          ytPlayerRef.current.setVolume(isMuted ? 0 : volume * 100);
+          ytPlayerRef.current.playVideo();
+        } catch (e) {}
+      } else if (targetTrack.audioUrl) {
         const audio = getNativeAudio();
         if (audio) {
           audio.src = targetTrack.audioUrl;
@@ -779,25 +800,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       }
 
-      if (targetTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
-        try {
-          ytPlayerRef.current.loadVideoById(targetTrack.youtubeId);
-          // Mute YouTube player when native audio is active so user gets 1 crystal-clear stream
-          ytPlayerRef.current.setVolume(targetTrack.audioUrl ? 0 : volume * 100);
-          ytPlayerRef.current.playVideo();
-        } catch (e) {}
-      }
-
       // Proactively fetch and queue similar tracks for seamless continuous playback
       prefetchSimilarTracks(targetTrack);
     } else {
-      if (targetTrack.audioUrl && nativeAudioRef.current) {
-        nativeAudioRef.current.play().catch(() => {});
-      }
       if (targetTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
+          ytPlayerRef.current.unMute();
+          ytPlayerRef.current.setVolume(isMuted ? 0 : volume * 100);
           ytPlayerRef.current.playVideo();
         } catch (e) {}
+      } else if (targetTrack.audioUrl && nativeAudioRef.current) {
+        nativeAudioRef.current.play().catch(() => {});
       }
     }
     setIsPlaying(true);
@@ -831,16 +844,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentTrack) return;
     setIsPlaying(true);
     ensureAudioCarrier(true);
-    if (nativeAudioRef.current) {
-      nativeAudioRef.current.play().catch(() => {});
-    }
     if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
       try {
-        if (nativeAudioRef.current && !isNaN(nativeAudioRef.current.currentTime)) {
-          ytPlayerRef.current.seekTo(nativeAudioRef.current.currentTime, true);
-        }
+        ytPlayerRef.current.unMute();
+        ytPlayerRef.current.setVolume(isMuted ? 0 : volume * 100);
         ytPlayerRef.current.playVideo();
       } catch (e) {}
+    } else if (nativeAudioRef.current && currentTrack.audioUrl) {
+      nativeAudioRef.current.play().catch(() => {});
     }
     if ('mediaSession' in navigator) {
       try {
@@ -864,13 +875,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const targetSeconds = clamped * duration;
     setCurrentTime(targetSeconds);
 
-    if (nativeAudioRef.current) {
-      nativeAudioRef.current.currentTime = targetSeconds;
-    }
     if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
       try {
         ytPlayerRef.current.seekTo(targetSeconds, true);
       } catch (e) {}
+    } else if (nativeAudioRef.current && currentTrack.audioUrl) {
+      nativeAudioRef.current.currentTime = targetSeconds;
     }
   };
 
@@ -884,15 +894,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     ensureAudioCarrier(true);
     if (currentTime > 3 || history.length === 0) {
       setCurrentTime(0);
-      if (nativeAudioRef.current) {
-        nativeAudioRef.current.currentTime = 0;
-        nativeAudioRef.current.play().catch(() => {});
-      }
       if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.seekTo(0, true);
           ytPlayerRef.current.playVideo();
         } catch (e) {}
+      } else if (nativeAudioRef.current && currentTrack.audioUrl) {
+        nativeAudioRef.current.currentTime = 0;
+        nativeAudioRef.current.play().catch(() => {});
       }
     } else {
       const prev = history[0];

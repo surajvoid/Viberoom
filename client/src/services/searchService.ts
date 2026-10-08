@@ -71,7 +71,7 @@ export function convertYouTubeVideoToTrack(ytVideo: any): Track {
     plays: Math.floor(Math.random() * 2000000) + 500000,
     likes: Math.floor(Math.random() * 150000) + 12000,
     lyrics,
-    audioUrl: resolveAudioUrlForTrack(ytVideo),
+    audioUrl: '',
   };
 }
 

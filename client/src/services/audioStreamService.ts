@@ -1,87 +1,44 @@
 /**
  * Audio Stream Service
  * 
- * Provides verified, high-fidelity audio streams for continuous mobile playback.
- * Ensures all songs (whether searched from YouTube, selected from soundscapes, or curated)
- * have direct audio streams played through native HTML5 <audio> elements.
- * 
- * This enables 100% continuous, unthrottled background playback on iOS Safari & Android Chrome
- * when the phone screen is turned off, during sleep mode, or when switching tabs/apps.
+ * Ensures authentic, real-time playback for all tracks.
+ * Does NOT inject or play default/demo audio tracks.
+ * Audio is streamed in real time directly from the authentic source (YouTube stream or uploaded media).
  */
 
 import { Track } from '../mockData.js';
 
-export const LOCAL_AUDIO_STREAMS = [
-  '/audio/vibe-track-1.mp3',
-  '/audio/vibe-track-2.mp3',
-  '/audio/vibe-track-3.mp3',
-];
-
-const GENRE_STREAM_MAP: Record<string, string> = {
-  'darkwave': '/audio/vibe-track-1.mp3',
-  'r&b': '/audio/vibe-track-1.mp3',
-  'indie': '/audio/vibe-track-2.mp3',
-  'acoustic': '/audio/vibe-track-2.mp3',
-  'romantic': '/audio/vibe-track-2.mp3',
-  'bollywood': '/audio/vibe-track-2.mp3',
-  'workout': '/audio/vibe-track-3.mp3',
-  'electronic': '/audio/vibe-track-3.mp3',
-  'synthwave': '/audio/vibe-track-1.mp3',
-  'night drive': '/audio/vibe-track-1.mp3',
-  'energy': '/audio/vibe-track-3.mp3',
-  'hip-hop': '/audio/vibe-track-1.mp3',
-  'lofi': '/audio/vibe-track-2.mp3',
-  'chill': '/audio/vibe-track-2.mp3',
-  'study': '/audio/vibe-track-2.mp3',
-  'focus': '/audio/vibe-track-3.mp3',
-  'ambient': '/audio/vibe-track-3.mp3',
-};
-
-/**
- * Resolves a deterministic, high-fidelity audio stream URL for any track.
- */
-export function resolveAudioUrlForTrack(track: Partial<Track> | null | undefined): string {
-  if (!track) return LOCAL_AUDIO_STREAMS[0];
-
-  // If already has a valid same-origin or working audio URL
-  if (track.audioUrl && typeof track.audioUrl === 'string' && track.audioUrl.trim().length > 0) {
-    const trimmed = track.audioUrl.trim();
-    if (LOCAL_AUDIO_STREAMS.includes(trimmed)) {
-      return trimmed;
-    }
-    if (trimmed.startsWith('http') && !trimmed.includes('pixabay.com')) {
-      return trimmed;
-    }
-  }
-
-  // Check genre/mood keywords
-  const genreLower = (track.genre || '').toLowerCase();
-  for (const [key, streamUrl] of Object.entries(GENRE_STREAM_MAP)) {
-    if (genreLower.includes(key)) {
-      return streamUrl;
-    }
-  }
-
-  // Fallback to deterministic hash of ID or title
-  const seed = (track.id || track.title || track.youtubeId || 'vibe').toLowerCase();
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash << 5) - hash + seed.charCodeAt(i);
-    hash |= 0;
-  }
-  const index = Math.abs(hash) % LOCAL_AUDIO_STREAMS.length;
-  return LOCAL_AUDIO_STREAMS[index];
+export function isDefaultAudioUrl(url?: string | null): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return (
+    lower.includes('/audio/vibe-track') ||
+    lower.includes('pixabay.com')
+  );
 }
 
 /**
- * Ensures a Track object has a valid audioUrl populated for mobile screen-off playback.
+ * Resolves an authentic audio stream URL only if a genuine custom stream is present.
+ * Never returns default / demo audio tracks.
+ */
+export function resolveAudioUrlForTrack(track: Partial<Track> | null | undefined): string {
+  if (!track || !track.audioUrl) return '';
+  const trimmed = track.audioUrl.trim();
+  if (isDefaultAudioUrl(trimmed)) {
+    return '';
+  }
+  return trimmed;
+}
+
+/**
+ * Sanitizes a Track object to ensure NO default / demo audio files are used.
  */
 export function ensureTrackAudioUrl(track: Track): Track {
   if (!track) return track;
-  if (!track.audioUrl || track.audioUrl.includes('pixabay.com')) {
+  if (isDefaultAudioUrl(track.audioUrl)) {
     return {
       ...track,
-      audioUrl: resolveAudioUrlForTrack(track),
+      audioUrl: '',
     };
   }
   return track;
