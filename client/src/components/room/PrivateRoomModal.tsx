@@ -8,6 +8,9 @@ import {
   MessageSquare,
   Plus,
   Play,
+  Pause,
+  SkipForward,
+  Sparkles,
   Heart,
   ThumbsDown,
   Trash2,
@@ -57,10 +60,14 @@ export const PrivateRoomModal: React.FC = () => {
     setRoomMode,
     setIsSuggestModalOpen,
     setIsGifPickerOpen,
+    roomTogglePlay,
+    roomSeekTo,
+    roomNextTrack,
   } = useRoom();
 
-  const { isPlaying } = usePlayer();
+  const { isPlaying, currentTime, duration } = usePlayer();
   const [activeTab, setActiveTab] = useState<'queue' | 'chat' | 'people'>('queue');
+  const [rightPanelTab, setRightPanelTab] = useState<'chat' | 'people'>('chat');
   const [chatInput, setChatInput] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
   const [isVideoMode, setIsVideoMode] = useState(false);
@@ -119,6 +126,16 @@ export const PrivateRoomModal: React.FC = () => {
   };
 
   const reactionEmojis = ['❤️', '🔥', '😭', '⚡', '🎵', '🫶'];
+
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds) || seconds < 0) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const trackDuration = duration > 0 ? duration : (activeRoom?.currentTrack?.duration || 180);
+  const progressPercent = trackDuration > 0 ? Math.min(100, Math.max(0, (currentTime / trackDuration) * 100)) : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-2xl select-none">
@@ -204,6 +221,48 @@ export const PrivateRoomModal: React.FC = () => {
             </button>
           </div>
         </header>
+
+        {/* Live Spotify Jam Bar */}
+        <div className="px-4 py-2 bg-gradient-to-r from-emerald-500/15 via-app-surface/90 to-app-accent/15 border-b border-app-border flex items-center justify-between gap-3 shrink-0 flex-wrap">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[11px] font-black uppercase tracking-wider">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+              LIVE SPOTIFY JAM
+            </span>
+            <span className="text-meta-sm font-bold text-app-text truncate">
+              Listening in sync with {activeRoom.participants.length} connected
+            </span>
+          </div>
+
+          {/* Participant Avatars Stack */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center -space-x-2 overflow-hidden py-0.5">
+              {activeRoom.participants.slice(0, 5).map((p, i) => (
+                <div
+                  key={p.user.id || i}
+                  className="relative inline-block rounded-full ring-2 ring-emerald-500/50 shadow-md"
+                  title={`${p.user.name} (${p.role === 'host' ? 'Host' : 'Listener'})`}
+                >
+                  <UserAvatar user={p.user} size="xs" showPresence={true} />
+                </div>
+              ))}
+            </div>
+            {activeRoom.participants.length > 5 && (
+              <span className="text-[11px] font-bold text-app-muted">
+                +{activeRoom.participants.length - 5}
+              </span>
+            )}
+            <button
+              onClick={() => {
+                setActiveTab('people');
+                setRightPanelTab('people');
+              }}
+              className="px-2.5 py-1 rounded-chip bg-app-elevated hover:bg-emerald-500/15 text-app-text hover:text-emerald-400 border border-app-border text-[11px] font-bold transition-colors"
+            >
+              Jam Members ({activeRoom.participants.length})
+            </button>
+          </div>
+        </div>
 
         {/* Quiet Presence Toast */}
         {presenceToast && (
@@ -302,56 +361,135 @@ export const PrivateRoomModal: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Synchronized Jam Playback Controls for Video */}
+                <div className="w-full max-w-2xl pt-2 border-t border-app-border/40 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2.5 text-[11px] font-mono text-app-muted">
+                    <span className="w-9 text-right font-semibold">{formatTime(currentTime)}</span>
+                    <div
+                      className="relative flex-1 h-2 bg-app-elevated hover:h-2.5 rounded-full overflow-hidden cursor-pointer group transition-all"
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                        roomSeekTo(ratio, false);
+                      }}
+                    >
+                      <div
+                        className="h-full bg-gradient-to-r from-emerald-400 to-app-accent rounded-full transition-all group-hover:brightness-110"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                    <span className="w-9 font-semibold">{formatTime(trackDuration)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-4 py-0.5">
+                    <button
+                      onClick={roomTogglePlay}
+                      className="w-10 h-10 rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black flex items-center justify-center shadow-lg shadow-emerald-500/30 transition-all font-bold"
+                      title={isPlaying ? 'Pause Jam for everyone' : 'Play Jam for everyone'}
+                    >
+                      {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
+                    </button>
+                    <button
+                      onClick={roomNextTrack}
+                      className="p-2 rounded-full hover:bg-app-elevated text-app-text hover:text-emerald-400 active:scale-90 transition-all"
+                      title="Skip to next queued track for everyone"
+                    >
+                      <SkipForward size={18} />
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : (
-              <div className="p-4 sm:p-6 bg-app-surface/50 border-b border-app-border flex flex-col sm:flex-row items-center gap-4 shrink-0">
-                <Artwork
-                  src={activeRoom.currentTrack.artworkSvg || ''}
-                  alt={activeRoom.currentTrack.title}
-                  size="md"
-                  rounded="card"
-                  isPlaying={isPlaying}
-                  glowColor={activeRoom.currentTrack.accentColor || '#FF3D81'}
-                />
+              <div className="p-4 sm:p-5 bg-app-surface/60 border-b border-app-border flex flex-col gap-3 shrink-0">
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <Artwork
+                    src={activeRoom.currentTrack.artworkSvg || ''}
+                    alt={activeRoom.currentTrack.title}
+                    size="md"
+                    rounded="card"
+                    isPlaying={isPlaying}
+                    glowColor={activeRoom.currentTrack.accentColor || '#FF3D81'}
+                  />
 
-                <div className="min-w-0 flex-1 text-center sm:text-left space-y-1">
-                  <div className="flex items-center justify-center sm:justify-start gap-2">
-                    <Badge variant="live">Now Playing</Badge>
-                    <span className="text-meta-sm text-app-muted">
-                      {activeRoom.participants.length} in room
-                    </span>
+                  <div className="min-w-0 flex-1 text-center sm:text-left space-y-1">
+                    <div className="flex items-center justify-center sm:justify-start gap-2">
+                      <Badge variant="live">Now Playing</Badge>
+                      <span className="text-meta-sm text-emerald-400 font-bold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                        Live Jam in Sync
+                      </span>
+                    </div>
+                    <h4 className="text-section-heading font-extrabold text-app-text truncate">
+                      {activeRoom.currentTrack.title}
+                    </h4>
+                    <p className="text-meta font-semibold text-app-accent truncate">
+                      {activeRoom.currentTrack.artist}
+                    </p>
                   </div>
-                  <h4 className="text-section-heading font-extrabold text-app-text truncate">
-                    {activeRoom.currentTrack.title}
-                  </h4>
-                  <p className="text-meta font-semibold text-app-accent truncate">
-                    {activeRoom.currentTrack.artist}
-                  </p>
+
+                  {/* Watch Video Mode Button + Reaction Buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsVideoMode(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-chip text-meta-sm font-bold bg-app-elevated hover:bg-rose-500/20 text-app-text hover:text-rose-400 border border-app-border hover:border-rose-500/40 transition-colors shadow-sm"
+                      title="Watch Official Music Video"
+                    >
+                      <Youtube size={16} className="text-rose-500" />
+                      <span>Watch Video</span>
+                    </button>
+
+                    <div className="flex items-center gap-1.5 bg-app-elevated/80 p-1.5 rounded-full border border-app-border shrink-0">
+                      {reactionEmojis.map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={() => sendReaction(emoji)}
+                          className="w-8 h-8 rounded-full hover:scale-125 active:scale-95 transition-transform flex items-center justify-center text-lg leading-none"
+                          title={`Send ${emoji} reaction`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                {/* Watch Video Mode Button + Reaction Buttons */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsVideoMode(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-chip text-meta-sm font-bold bg-app-elevated hover:bg-rose-500/20 text-app-text hover:text-rose-400 border border-app-border hover:border-rose-500/40 transition-colors shadow-sm"
-                    title="Watch Official Music Video"
-                  >
-                    <Youtube size={16} className="text-rose-500" />
-                    <span>Watch Video</span>
-                  </button>
+                {/* Spotify Jam Synchronized Playback Controls & Seekbar */}
+                <div className="w-full pt-2 border-t border-app-border/40 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2.5 text-[11px] font-mono text-app-muted">
+                    <span className="w-9 text-right font-semibold">{formatTime(currentTime)}</span>
+                    <div
+                      className="relative flex-1 h-2 bg-app-elevated hover:h-2.5 rounded-full overflow-hidden cursor-pointer group transition-all"
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                        roomSeekTo(ratio, false);
+                      }}
+                    >
+                      <div
+                        className="h-full bg-gradient-to-r from-emerald-400 to-app-accent rounded-full transition-all group-hover:brightness-110 shadow-sm"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                    <span className="w-9 font-semibold">{formatTime(trackDuration)}</span>
+                  </div>
 
-                  {/* Floating Reaction Trigger Buttons */}
-                  <div className="flex items-center gap-1.5 bg-app-elevated/80 p-1.5 rounded-full border border-app-border shrink-0">
-                    {reactionEmojis.map((emoji) => (
-                      <button
-                        key={emoji}
-                        onClick={() => sendReaction(emoji)}
-                        className="w-8 h-8 rounded-full hover:scale-125 active:scale-95 transition-transform flex items-center justify-center text-lg leading-none"
-                        title={`Send ${emoji} reaction`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-center gap-4 py-1">
+                    <button
+                      onClick={roomTogglePlay}
+                      className="w-11 h-11 rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black flex items-center justify-center shadow-lg shadow-emerald-500/30 transition-all font-bold"
+                      title={isPlaying ? 'Pause Jam for everyone' : 'Play Jam for everyone'}
+                    >
+                      {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}
+                    </button>
+
+                    <button
+                      onClick={roomNextTrack}
+                      className="p-2 rounded-full hover:bg-app-elevated text-app-text hover:text-emerald-400 active:scale-90 transition-all"
+                      title="Skip to next queued track for everyone"
+                    >
+                      <SkipForward size={20} />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -529,34 +667,79 @@ export const PrivateRoomModal: React.FC = () => {
               activeTab === 'queue' ? 'hidden md:flex' : 'flex'
             }`}
           >
-            {/* If People Tab Selected on Mobile */}
-            {activeTab === 'people' ? (
+            {/* Header Tabs on Right Panel: Chat | Jam Members */}
+            <div className="flex items-center border-b border-app-border bg-app-surface/90 p-1 shrink-0">
+              <button
+                onClick={() => {
+                  setRightPanelTab('chat');
+                  setActiveTab('chat');
+                }}
+                className={`flex-1 py-1.5 text-meta font-bold rounded-chip flex items-center justify-center gap-1.5 transition-colors ${
+                  rightPanelTab === 'chat' && activeTab !== 'people'
+                    ? 'bg-app-elevated text-app-accent border border-app-border/60 shadow-sm'
+                    : 'text-app-muted hover:text-app-text'
+                }`}
+              >
+                <MessageSquare size={14} />
+                <span>Chat ({activeRoom.chatMessages.length})</span>
+              </button>
+              <button
+                onClick={() => {
+                  setRightPanelTab('people');
+                  setActiveTab('people');
+                }}
+                className={`flex-1 py-1.5 text-meta font-bold rounded-chip flex items-center justify-center gap-1.5 transition-colors ${
+                  rightPanelTab === 'people' || activeTab === 'people'
+                    ? 'bg-app-elevated text-emerald-400 border border-emerald-500/30 shadow-sm'
+                    : 'text-app-muted hover:text-app-text'
+                }`}
+              >
+                <Users size={14} />
+                <span>Jam ({activeRoom.participants.length})</span>
+              </button>
+            </div>
+
+            {/* If People Tab Selected */}
+            {rightPanelTab === 'people' || activeTab === 'people' ? (
               <div className="p-4 space-y-4 overflow-y-auto flex-1 scrollbar-none">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-section-heading font-bold text-app-text">
-                    Participants ({activeRoom.participants.length})
-                  </h4>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <h4 className="text-section-heading font-bold text-app-text">
+                      Jam Members ({activeRoom.participants.length})
+                    </h4>
+                  </div>
+                  <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    IN SYNC
+                  </span>
                 </div>
 
                 <div className="space-y-2">
-                  {activeRoom.participants.map((p, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-2.5 rounded-chip bg-app-elevated border border-app-border"
-                    >
-                      <div className="flex items-center gap-3">
-                        <UserAvatar user={p.user} size="sm" showPresence={true} />
-                        <div>
-                          <p className="text-body font-bold text-app-text">{p.user.name}</p>
-                          <p className="text-meta-sm text-app-muted">{p.user.handle}</p>
+                  {activeRoom.participants.map((p, idx) => {
+                    const isHost = p.role === 'host' || p.user.id === activeRoom.host.id;
+                    const isMe = p.user.id === currentUserId;
+                    return (
+                      <div
+                        key={p.user.id || idx}
+                        className="flex items-center justify-between p-2.5 rounded-chip bg-app-elevated border border-app-border"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <UserAvatar user={p.user} size="sm" showPresence={true} />
+                          <div className="min-w-0">
+                            <p className="text-body font-bold text-app-text truncate flex items-center gap-1">
+                              <span>{p.user.name}</span>
+                              {isMe && <span className="text-[10px] text-app-accent font-mono">(You)</span>}
+                            </p>
+                            <p className="text-meta-sm text-app-muted truncate">{p.user.handle}</p>
+                          </div>
                         </div>
+                        <Badge variant={isHost ? 'accent' : 'default'}>
+                          {isHost && <Crown size={11} className="inline mr-1 text-amber-300" />}
+                          {isHost ? 'HOST' : 'LISTENER'}
+                        </Badge>
                       </div>
-                      <Badge variant={p.role === 'host' ? 'accent' : 'default'}>
-                        {p.role === 'host' && <Crown size={11} className="inline mr-1" />}
-                        {p.role.toUpperCase()}
-                      </Badge>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Host Mode Controls */}

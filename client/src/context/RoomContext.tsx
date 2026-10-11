@@ -70,6 +70,9 @@ export interface RoomContextType {
   setIsJoinModalOpen: (open: boolean) => void;
   setIsSuggestModalOpen: (open: boolean) => void;
   setIsGifPickerOpen: (open: boolean) => void;
+  roomTogglePlay: () => void;
+  roomSeekTo: (ratioOrSeconds: number, isSeconds?: boolean) => void;
+  roomNextTrack: () => void;
 }
 
 export function getSocketUrl(): string {
@@ -171,11 +174,83 @@ const normalizeQueue = (queue: any[], defaultUser: User): QueueItem[] => {
   });
 };
 
+const normalizeUser = (u: any): User => {
+  if (!u) {
+    return {
+      id: 'usr-unknown',
+      name: 'Listener',
+      handle: '@listener',
+      avatarSvg: '',
+      status: 'online',
+      isFriend: false,
+      musicPersonality: {
+        topGenre: 'Pop',
+        vibeTag: 'Music Lover 🎧',
+        matchPercent: 100,
+        sonicArchetype: 'The Sonic Explorer',
+        weeklyListeningHours: 0,
+      },
+    };
+  }
+  return {
+    id: u.id || `usr-${Date.now()}`,
+    name: u.name || 'Listener',
+    handle: u.handle || `@${(u.name || 'listener').toLowerCase().replace(/\s+/g, '_')}`,
+    avatarSvg: u.avatarSvg || u.avatarUrl || '',
+    status: (u.status as any) || 'online',
+    isFriend: !!u.isFriend,
+    musicPersonality: u.musicPersonality || {
+      topGenre: 'Pop',
+      vibeTag: 'Music Lover 🎧',
+      matchPercent: 100,
+      sonicArchetype: 'The Sonic Explorer',
+      weeklyListeningHours: 0,
+    },
+  };
+};
+
+const convertBackendMembersToParticipants = (
+  members: any[],
+  hostId?: string,
+  fallbackUser?: User
+): { user: User; role: 'host' | 'dj' | 'listener' }[] => {
+  if (!Array.isArray(members) || members.length === 0) {
+    if (fallbackUser) {
+      return [{ user: fallbackUser, role: 'host' }];
+    }
+    return [];
+  }
+  const seenUserIds = new Set<string>();
+  const participants: { user: User; role: 'host' | 'dj' | 'listener' }[] = [];
+
+  for (const m of members) {
+    const rawUser = m.user || m;
+    const user = normalizeUser(rawUser);
+    if (seenUserIds.has(user.id)) continue;
+    seenUserIds.add(user.id);
+    const isHost = hostId ? user.id === hostId : m.role === 'host';
+    participants.push({
+      user,
+      role: isHost ? 'host' : (m.role || 'listener'),
+    });
+  }
+  return participants;
+};
+
 const RoomContext = createContext<RoomContextType | undefined>(undefined);
 
 export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
-  const { playTrack, currentTrack } = usePlayer();
+  const {
+    playTrack,
+    currentTrack,
+    isPlaying,
+    currentTime,
+    duration,
+    pause,
+    resume,
+    seekToSeconds,
+  } = usePlayer();
   const [roomsList, setRoomsList] = useState<Room[]>(() => {
     try {
       const saved = localStorage.getItem('viberoom_rooms');
@@ -194,6 +269,27 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const socketRef = useRef<Socket | null>(null);
   const sessionStartTimeRef = useRef<number>(Date.now());
   const reactionCountRef = useRef<number>(0);
+
+  const playTrackRef = useRef(playTrack);
+  const pauseRef = useRef(pause);
+  const resumeRef = useRef(resume);
+  const seekToSecondsRef = useRef(seekToSeconds);
+  const currentTimeRef = useRef(currentTime);
+  const durationRef = useRef(duration);
+  const isPlayingRef = useRef(isPlaying);
+  const activeRoomRef = useRef(activeRoom);
+  const isRemoteSyncRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    playTrackRef.current = playTrack;
+    pauseRef.current = pause;
+    resumeRef.current = resume;
+    seekToSecondsRef.current = seekToSeconds;
+    currentTimeRef.current = currentTime;
+    durationRef.current = duration;
+    isPlayingRef.current = isPlaying;
+    activeRoomRef.current = activeRoom;
+  });
 
   const getActiveUser = (): User => {
     if (currentUser) return currentUser;
@@ -259,6 +355,87 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       socketRef.current = socket;
 
+      socket.on('connect', () => {
+        if (activeRoomRef.current) {
+          socket?.emit('room:join', {
+            roomId: activeRoomRef.current.id,
+            user: getActiveUser(),
+          });
+        }
+      });
+
+      socket.on('sync:played', (data: any) => {
+        const me = getActiveUser();
+        if (data.updatedBy === me.id) return;
+
+        isRemoteSyncRef.current = true;
+        resumeRef.current?.();
+
+        if (typeof data.positionMs === 'number') {
+          const targetSec = data.positionMs / 1000;
+          const cur = currentTimeRef.current || 0;
+          if (Math.abs(cur - targetSec) > 1.5) {
+            seekToSecondsRef.current?.(targetSec);
+          }
+        }
+
+        setPresenceToast('Jam: Host resumed playback 🎵');
+        setTimeout(() => {
+          setPresenceToast(null);
+          isRemoteSyncRef.current = false;
+        }, 2000);
+      });
+
+      socket.on('sync:paused', (data: any) => {
+        const me = getActiveUser();
+        if (data.updatedBy === me.id) return;
+
+        isRemoteSyncRef.current = true;
+        pauseRef.current?.();
+
+        if (typeof data.positionMs === 'number') {
+          seekToSecondsRef.current?.(data.positionMs / 1000);
+        }
+
+        setPresenceToast('Jam: Playback paused in room ⏸️');
+        setTimeout(() => {
+          setPresenceToast(null);
+          isRemoteSyncRef.current = false;
+        }, 2000);
+      });
+
+      socket.on('sync:seeked', (data: any) => {
+        const me = getActiveUser();
+        if (data.updatedBy === me.id) return;
+
+        if (typeof data.positionMs === 'number') {
+          isRemoteSyncRef.current = true;
+          seekToSecondsRef.current?.(data.positionMs / 1000);
+          setTimeout(() => {
+            isRemoteSyncRef.current = false;
+          }, 350);
+        }
+      });
+
+      socket.on('sync:song_changed', (data: any) => {
+        const me = getActiveUser();
+        if (data.updatedBy === me.id) return;
+
+        if (data.currentSong) {
+          const track = convertBackendSongToTrack(data.currentSong);
+          if (track) {
+            isRemoteSyncRef.current = true;
+            setActiveRoom((prev) => (prev ? { ...prev, currentTrack: track } : null));
+            playTrackRef.current?.(track);
+            setPresenceToast(`Jam: Now playing "${track.title}" 🎶`);
+            setTimeout(() => {
+              setPresenceToast(null);
+              isRemoteSyncRef.current = false;
+            }, 3000);
+          }
+        }
+      });
+
       socket.on('reaction:received', (data: { emoji: string; count?: number }) => {
         triggerFloatingReaction(data.emoji, data.count || 1);
       });
@@ -267,14 +444,7 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (msg && msg.text) {
           const incomingMsg: ChatMessage = {
             id: msg.id || `msg-${Date.now()}`,
-            sender: msg.user || {
-              id: 'usr-peer',
-              name: 'Listener',
-              handle: '@listener',
-              avatarSvg: '',
-              status: 'online',
-              isFriend: false,
-            },
+            sender: normalizeUser(msg.user),
             type: msg.type === 'gif' ? 'gif' : 'text',
             content: msg.text,
             timestamp: new Date(msg.timestamp || Date.now()).toLocaleTimeString([], {
@@ -290,10 +460,45 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-      socket.on('room:member_joined', ({ member }: any) => {
-        if (member?.user) {
-          setPresenceToast(`${member.user.name} joined the room! 👋`);
-          setTimeout(() => setPresenceToast(null), 3500);
+      socket.on('room:member_joined', ({ member, room }: any) => {
+        if (!member?.user) return;
+        const joinedUser = normalizeUser(member.user);
+        const me = getActiveUser();
+
+        setActiveRoom((prev) => {
+          if (!prev) return null;
+          const remaining = prev.participants.filter((p) => p.user.id !== joinedUser.id);
+          const newParticipant: { user: User; role: 'host' | 'dj' | 'listener' } = {
+            user: joinedUser,
+            role: joinedUser.id === prev.host.id ? 'host' : 'listener',
+          };
+          const updated = [...remaining, newParticipant];
+          return {
+            ...prev,
+            participants: updated,
+            listenerCount: updated.length,
+          };
+        });
+
+        if (joinedUser.id !== me.id) {
+          setPresenceToast(`🎉 ${joinedUser.name} joined the Jam! Listening together in sync.`);
+          setTimeout(() => setPresenceToast(null), 4500);
+        }
+      });
+
+      socket.on('room:member_left', ({ userId, userName, room }: any) => {
+        setActiveRoom((prev) => {
+          if (!prev) return null;
+          const remaining = prev.participants.filter((p) => p.user.id !== userId);
+          return {
+            ...prev,
+            participants: remaining,
+            listenerCount: Math.max(1, remaining.length),
+          };
+        });
+        if (userName) {
+          setPresenceToast(`${userName} left the Jam.`);
+          setTimeout(() => setPresenceToast(null), 3000);
         }
       });
     } catch (e) {
@@ -375,71 +580,125 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const joinRoom = async (codeOrId: string): Promise<boolean> => {
     const clean = codeOrId.replace('#', '').trim().toUpperCase();
     if (!clean) return false;
+    const me = getActiveUser();
 
-    // 1. Look in local state memory
-    let found = roomsList.find(
-      (r) => r.id.toUpperCase() === clean || r.code.toUpperCase() === clean
-    );
-
-    // 2. Look in MOCK_ROOMS
-    if (!found) {
-      found = MOCK_ROOMS.find(
-        (r) => r.id.toUpperCase() === clean || r.code.toUpperCase() === clean
-      );
-    }
-
-    // 3. Look in localStorage
-    if (!found) {
-      try {
-        const saved = localStorage.getItem('viberoom_rooms');
-        if (saved) {
-          const parsed: Room[] = JSON.parse(saved);
-          found = parsed.find(
-            (r) => r.id.toUpperCase() === clean || r.code.toUpperCase() === clean
-          );
+    // 1. Try connecting via Socket.IO with acknowledgment
+    let socketRoom: any = null;
+    try {
+      if (socketRef.current) {
+        const response: any = await new Promise((resolve) => {
+          const timeout = setTimeout(() => resolve(null), 2500);
+          socketRef.current?.emit('room:join', { roomId: clean, user: me }, (ack: any) => {
+            clearTimeout(timeout);
+            resolve(ack);
+          });
+        });
+        if (response?.success && response?.room) {
+          socketRoom = response.room;
         }
-      } catch {}
+      }
+    } catch (e) {
+      console.warn('Socket join error:', e);
     }
 
-    // 4. Query backend API
-    if (!found) {
+    // 2. Query backend API if socketRoom was not acquired
+    let backendRoom: any = null;
+    if (!socketRoom) {
       try {
         const baseUrl = getApiBaseUrl();
         const res = await fetch(`${baseUrl}/rooms/${encodeURIComponent(clean)}`);
         if (res.ok) {
           const data = await res.json();
           if (data.room) {
-            const r = data.room;
-            const me = getActiveUser();
-            found = {
-              id: r.id,
-              name: r.title || r.name || `Room ${clean}`,
-              code: r.code || clean,
-              description: r.description || '',
-              host: r.hostUser || me,
-              mode: normalizeMode(r.mode),
-              participants: r.members?.length
-                ? r.members
-                : [{ user: me, role: 'listener' }],
-              currentTrack: convertBackendSongToTrack(r.currentSong),
-              queue: normalizeQueue(r.queue, me),
-              history: [],
-              chatMessages: r.messages || [],
-              isLive: true,
-              listenerCount: r.listenerCount || 1,
-            };
+            backendRoom = data.room;
           }
         }
       } catch (err) {
-        console.warn('API room query notice:', err);
+        console.warn('Backend room fetch error:', err);
       }
     }
 
-    // 5. Universal Instant Connect for valid room codes
-    if (!found && clean.length >= 3) {
-      const me = getActiveUser();
+    const r = socketRoom || backendRoom;
+    let roomToJoin: Room | null = null;
+
+    if (r) {
+      const roomTrack = convertBackendSongToTrack(r.currentSong);
+      const participants = convertBackendMembersToParticipants(r.members, r.hostId, me);
+      if (!participants.some((p) => p.user.id === me.id)) {
+        participants.push({ user: me, role: 'listener' });
+      }
+
+      roomToJoin = {
+        id: r.id,
+        name: r.title || r.name || `Room ${clean}`,
+        code: r.code || clean,
+        description: r.description || '',
+        host: r.hostUser ? normalizeUser(r.hostUser) : me,
+        mode: normalizeMode(r.mode),
+        participants,
+        currentTrack: roomTrack,
+        queue: normalizeQueue(r.queue, me),
+        history: [],
+        chatMessages: r.messages || [],
+        isLive: true,
+        listenerCount: Math.max(participants.length, r.listenerCount || 1),
+      };
+
+      setRoomsList((prev) => {
+        const filtered = prev.filter((rm) => rm.code.toUpperCase() !== roomToJoin!.code.toUpperCase());
+        return [roomToJoin!, ...filtered];
+      });
+
+      sessionStartTimeRef.current = Date.now();
+      reactionCountRef.current = 0;
+      setActiveRoom(roomToJoin);
+      setIsRoomModalOpen(true);
+      setSyncStatus('synced');
+
+      // Sync playback to authoritative room track & position
+      if (roomTrack) {
+        isRemoteSyncRef.current = true;
+        playTrack(roomTrack);
+        if (typeof r.positionMs === 'number' && r.positionMs > 0) {
+          setTimeout(() => {
+            seekToSeconds(r.positionMs / 1000);
+          }, 350);
+        }
+        if (r.isPlaying === false) {
+          setTimeout(() => {
+            pause();
+          }, 450);
+        }
+        setTimeout(() => {
+          isRemoteSyncRef.current = false;
+        }, 800);
+      }
+
+      setPresenceToast(`🎉 Connected to ${roomToJoin.name}! Listening in Jam sync.`);
+      setTimeout(() => setPresenceToast(null), 4000);
+      return true;
+    }
+
+    // 3. Look in local state memory / mock rooms
+    let found = roomsList.find((rm) => rm.id.toUpperCase() === clean || rm.code.toUpperCase() === clean);
+    if (!found) {
+      found = MOCK_ROOMS.find((rm) => rm.id.toUpperCase() === clean || rm.code.toUpperCase() === clean);
+    }
+
+    if (found) {
+      setActiveRoom(found);
+      setIsRoomModalOpen(true);
+      if (found.currentTrack) playTrack(found.currentTrack);
+      if (socketRef.current) {
+        socketRef.current.emit('room:join', { roomId: found.id, user: me });
+      }
+      return true;
+    }
+
+    // 4. Auto-create room for code if code is 3+ chars
+    if (clean.length >= 3) {
       const defaultTrack = currentTrack || MOCK_TRACKS[0];
-      found = {
+      const newRoom: Room = {
         id: `room-${clean.toLowerCase()}`,
         name: `Room ${clean}`,
         code: clean,
@@ -454,59 +713,12 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLive: true,
         listenerCount: 1,
       };
-
-      try {
-        const baseUrl = getApiBaseUrl();
-        fetch(`${baseUrl}/rooms`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: `Room ${clean}`,
-            code: clean,
-            mode: 'democratic',
-            hostUser: {
-              id: me.id,
-              name: me.name,
-              handle: me.handle,
-              avatarUrl: me.avatarSvg,
-              status: 'online',
-            },
-          }),
-        }).catch(() => {});
-      } catch {}
-    }
-
-    if (found) {
-      const roomToJoin = found;
-      setRoomsList((prev) => {
-        if (!prev.some((r) => r.code.toUpperCase() === roomToJoin.code.toUpperCase())) {
-          return [roomToJoin, ...prev];
-        }
-        return prev;
-      });
-
-      sessionStartTimeRef.current = Date.now();
-      reactionCountRef.current = 0;
-      setActiveRoom(roomToJoin);
+      setActiveRoom(newRoom);
       setIsRoomModalOpen(true);
-
-      if (roomToJoin.currentTrack) {
-        playTrack(roomToJoin.currentTrack);
+      if (defaultTrack) playTrack(defaultTrack);
+      if (socketRef.current) {
+        socketRef.current.emit('room:join', { roomId: newRoom.id, user: me });
       }
-      setSyncStatus('synced');
-      setPresenceToast(`Connected to ${roomToJoin.name}! 🎧`);
-      setTimeout(() => setPresenceToast(null), 4000);
-
-      // Notify Socket.IO room
-      try {
-        if (socketRef.current) {
-          socketRef.current.emit('room:join', {
-            roomId: roomToJoin.id,
-            user: getActiveUser(),
-          });
-        }
-      } catch {}
-
       return true;
     }
 
@@ -521,9 +733,10 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const me = getActiveUser();
     const newCode = generateUniqueRoomCode(roomsList);
     const selectedTrack = initialTrack !== undefined ? initialTrack : (currentTrack || null);
+    const roomId = `room-${newCode.toLowerCase()}`;
 
     const newRoom: Room = {
-      id: `room-${Date.now()}`,
+      id: roomId,
       name,
       code: newCode,
       description: '',
@@ -560,13 +773,8 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
           title: name,
           code: newCode,
           mode,
-          hostUser: {
-            id: me.id,
-            name: me.name,
-            handle: me.handle,
-            avatarUrl: me.avatarSvg,
-            status: 'online',
-          },
+          hostUser: me,
+          initialSong: selectedTrack,
         }),
       }).catch((e) => console.warn('Backend room sync notice:', e));
     } catch {}
@@ -804,6 +1012,58 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setTimeout(() => setPresenceToast(null), 3000);
   };
 
+  const roomTogglePlay = () => {
+    if (!activeRoom) return;
+    const me = getActiveUser();
+    if (isPlaying) {
+      pause();
+      if (socketRef.current) {
+        socketRef.current.emit('sync:pause', {
+          roomId: activeRoom.id,
+          userId: me.id,
+          positionMs: Math.round((currentTime || 0) * 1000),
+        });
+      }
+    } else {
+      resume();
+      if (socketRef.current) {
+        socketRef.current.emit('sync:play', {
+          roomId: activeRoom.id,
+          userId: me.id,
+          positionMs: Math.round((currentTime || 0) * 1000),
+        });
+      }
+    }
+  };
+
+  const roomSeekTo = (ratioOrSeconds: number, isSeconds = false) => {
+    if (!activeRoom) return;
+    const me = getActiveUser();
+    const dur = duration > 0 ? duration : (activeRoom.currentTrack?.duration || 180);
+    const targetSeconds = isSeconds
+      ? Math.max(0, Math.min(dur, ratioOrSeconds))
+      : Math.max(0, Math.min(1, ratioOrSeconds)) * dur;
+
+    seekToSeconds(targetSeconds);
+    if (socketRef.current) {
+      socketRef.current.emit('sync:seek', {
+        roomId: activeRoom.id,
+        userId: me.id,
+        positionMs: Math.round(targetSeconds * 1000),
+      });
+    }
+  };
+
+  const roomNextTrack = () => {
+    if (!activeRoom) return;
+    if (activeRoom.queue.length > 0) {
+      const nextItem = activeRoom.queue[0];
+      const remainingQueue = activeRoom.queue.slice(1);
+      setActiveRoom((prev) => (prev ? { ...prev, queue: remainingQueue } : null));
+      playRoomSong(nextItem.track);
+    }
+  };
+
   return (
     <RoomContext.Provider
       value={{
@@ -839,6 +1099,9 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsJoinModalOpen,
         setIsSuggestModalOpen,
         setIsGifPickerOpen,
+        roomTogglePlay,
+        roomSeekTo,
+        roomNextTrack,
       }}
     >
       {children}

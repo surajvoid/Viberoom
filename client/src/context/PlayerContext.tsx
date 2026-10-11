@@ -38,6 +38,7 @@ export interface PlayerContextType {
   pause: () => void;
   resume: () => void;
   seekTo: (ratio: number) => void;
+  seekToSeconds: (seconds: number) => void;
   nextTrack: () => void;
   prevTrack: () => void;
   addToQueue: (track: Track) => void;
@@ -869,19 +870,26 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const seekTo = (ratio: number) => {
+  const seekToSeconds = (seconds: number) => {
     if (!currentTrack) return;
-    const clamped = Math.min(1, Math.max(0, ratio));
-    const targetSeconds = clamped * duration;
-    setCurrentTime(targetSeconds);
+    const dur = duration > 0 ? duration : (currentTrack.duration || 180);
+    const clampedSec = Math.max(0, Math.min(dur, seconds));
+    setCurrentTime(clampedSec);
 
     if (currentTrack.youtubeId && ytReadyRef.current && ytPlayerRef.current) {
       try {
-        ytPlayerRef.current.seekTo(targetSeconds, true);
+        ytPlayerRef.current.seekTo(clampedSec, true);
       } catch (e) {}
     } else if (nativeAudioRef.current && currentTrack.audioUrl) {
-      nativeAudioRef.current.currentTime = targetSeconds;
+      nativeAudioRef.current.currentTime = clampedSec;
     }
+  };
+
+  const seekTo = (ratio: number) => {
+    if (!currentTrack) return;
+    const dur = duration > 0 ? duration : (currentTrack.duration || 180);
+    const clamped = Math.min(1, Math.max(0, ratio));
+    seekToSeconds(clamped * dur);
   };
 
   const nextTrack = () => {
@@ -1010,6 +1018,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         pause,
         resume,
         seekTo,
+        seekToSeconds,
         nextTrack,
         prevTrack,
         addToQueue,

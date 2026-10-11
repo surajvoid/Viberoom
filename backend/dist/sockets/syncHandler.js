@@ -17,6 +17,9 @@ export function registerSocketHandlers(io) {
             const room = roomManager.createRoom(params);
             const joinResult = roomManager.joinRoom(room.id, socket.id, params.hostUser);
             socket.join(room.id);
+            if (room.code) {
+                socket.join(room.code.toUpperCase());
+            }
             if (typeof ack === 'function') {
                 ack({ success: true, room: joinResult?.room || room });
             }
@@ -31,6 +34,9 @@ export function registerSocketHandlers(io) {
                 return;
             }
             socket.join(result.room.id);
+            if (result.room.code) {
+                socket.join(result.room.code.toUpperCase());
+            }
             if (typeof ack === 'function') {
                 ack({
                     success: true,
@@ -40,7 +46,11 @@ export function registerSocketHandlers(io) {
                 });
             }
             // Notify others in room
-            socket.to(result.room.id).emit('room:member_joined', {
+            const target = socket.to(result.room.id);
+            if (result.room.code) {
+                target.to(result.room.code.toUpperCase());
+            }
+            target.emit('room:member_joined', {
                 member: result.member,
                 room: result.room,
             });
@@ -50,66 +60,91 @@ export function registerSocketHandlers(io) {
         socket.on('sync:play', (payload) => {
             const updatedRoom = roomManager.play(payload.roomId, payload.userId, payload.positionMs);
             if (updatedRoom) {
-                io.to(payload.roomId).emit('sync:played', {
-                    roomId: payload.roomId,
+                const eventData = {
+                    roomId: updatedRoom.id,
+                    code: updatedRoom.code,
                     isPlaying: true,
                     positionMs: updatedRoom.positionMs,
                     serverTimestamp: updatedRoom.serverTimestamp,
                     songId: updatedRoom.currentSong?.id || '',
+                    currentSong: updatedRoom.currentSong,
                     updatedBy: payload.userId,
-                });
+                };
+                const target = io.to(updatedRoom.id);
+                if (updatedRoom.code)
+                    target.to(updatedRoom.code.toUpperCase());
+                target.emit('sync:played', eventData);
             }
         });
         // Playback sync: Pause
         socket.on('sync:pause', (payload) => {
             const updatedRoom = roomManager.pause(payload.roomId, payload.userId, payload.positionMs);
             if (updatedRoom) {
-                io.to(payload.roomId).emit('sync:paused', {
-                    roomId: payload.roomId,
+                const eventData = {
+                    roomId: updatedRoom.id,
+                    code: updatedRoom.code,
                     isPlaying: false,
                     positionMs: updatedRoom.positionMs,
                     serverTimestamp: updatedRoom.serverTimestamp,
                     songId: updatedRoom.currentSong?.id || '',
                     updatedBy: payload.userId,
-                });
+                };
+                const target = io.to(updatedRoom.id);
+                if (updatedRoom.code)
+                    target.to(updatedRoom.code.toUpperCase());
+                target.emit('sync:paused', eventData);
             }
         });
         // Playback sync: Seek
         socket.on('sync:seek', (payload) => {
             const updatedRoom = roomManager.seek(payload.roomId, payload.userId, payload.positionMs);
             if (updatedRoom) {
-                io.to(payload.roomId).emit('sync:seeked', {
-                    roomId: payload.roomId,
+                const eventData = {
+                    roomId: updatedRoom.id,
+                    code: updatedRoom.code,
                     positionMs: updatedRoom.positionMs,
                     serverTimestamp: updatedRoom.serverTimestamp,
                     updatedBy: payload.userId,
-                });
+                };
+                const target = io.to(updatedRoom.id);
+                if (updatedRoom.code)
+                    target.to(updatedRoom.code.toUpperCase());
+                target.emit('sync:seeked', eventData);
             }
         });
         // Playback sync: Change Song
         socket.on('sync:change_song', (payload) => {
             const updatedRoom = roomManager.changeSong(payload.roomId, payload.userId, payload.song);
             if (updatedRoom) {
-                io.to(payload.roomId).emit('sync:song_changed', {
-                    roomId: payload.roomId,
+                const eventData = {
+                    roomId: updatedRoom.id,
+                    code: updatedRoom.code,
                     currentSong: updatedRoom.currentSong,
                     positionMs: 0,
                     isPlaying: true,
                     serverTimestamp: updatedRoom.serverTimestamp,
                     updatedBy: payload.userId,
-                });
+                };
+                const target = io.to(updatedRoom.id);
+                if (updatedRoom.code)
+                    target.to(updatedRoom.code.toUpperCase());
+                target.emit('sync:song_changed', eventData);
             }
         });
         // Live chat message
         socket.on('chat:send', (payload) => {
             const message = roomManager.addMessage(payload.roomId, payload.user, payload.text, payload.gifUrl);
             if (message) {
-                io.to(payload.roomId).emit('chat:message', message);
+                const room = roomManager.getRawRoom(payload.roomId);
+                const target = room ? io.to(room.id).to(room.code.toUpperCase()) : io.to(payload.roomId);
+                target.emit('chat:message', message);
             }
         });
         // Chat typing indicator
         socket.on('chat:typing', (payload) => {
-            socket.to(payload.roomId).emit('chat:typing_status', {
+            const room = roomManager.getRawRoom(payload.roomId);
+            const target = room ? socket.to(room.id).to(room.code.toUpperCase()) : socket.to(payload.roomId);
+            target.emit('chat:typing_status', {
                 userId: payload.user.id,
                 userName: payload.user.name,
                 isTyping: payload.isTyping,
@@ -119,7 +154,9 @@ export function registerSocketHandlers(io) {
         socket.on('reaction:send', (payload) => {
             const reaction = roomManager.addReaction(payload.roomId, payload.user, payload.emoji, payload.positionMs);
             if (reaction) {
-                io.to(payload.roomId).emit('reaction:received', reaction);
+                const room = roomManager.getRawRoom(payload.roomId);
+                const target = room ? io.to(room.id).to(room.code.toUpperCase()) : io.to(payload.roomId);
+                target.emit('reaction:received', reaction);
             }
         });
         // Groic Song Dedications
@@ -127,15 +164,35 @@ export function registerSocketHandlers(io) {
             const dedication = roomManager.addDedication(payload);
             io.emit('dedication:new', dedication);
         });
+        // Explicit room leave
+        socket.on('room:leave', (payload) => {
+            const result = roomManager.leaveRoom(socket.id);
+            if (result) {
+                const eventData = {
+                    userId: result.user?.id,
+                    userName: result.user?.name,
+                    room: result.room,
+                };
+                const target = socket.to(result.roomId);
+                if (result.room.code)
+                    target.to(result.room.code.toUpperCase());
+                target.emit('room:member_left', eventData);
+                io.emit('rooms:updated', roomManager.getAllRooms());
+            }
+        });
         // Disconnect / Leave
         socket.on('disconnect', () => {
             const result = roomManager.leaveRoom(socket.id);
             if (result) {
-                socket.to(result.roomId).emit('room:member_left', {
+                const eventData = {
                     userId: result.user?.id,
                     userName: result.user?.name,
                     room: result.room,
-                });
+                };
+                const target = socket.to(result.roomId);
+                if (result.room.code)
+                    target.to(result.room.code.toUpperCase());
+                target.emit('room:member_left', eventData);
                 io.emit('rooms:updated', roomManager.getAllRooms());
             }
         });

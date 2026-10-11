@@ -9,13 +9,23 @@ export class RoomManager {
             this.rooms.set(room.id, { ...room, members: [] });
         }
     }
-    getRoom(roomId) {
-        // Try by roomId first (or case-insensitive)
-        let room = this.rooms.get(roomId) || this.rooms.get(roomId.toLowerCase()) || this.rooms.get(roomId.toUpperCase());
+    getRawRoom(roomIdOrCode) {
+        if (!roomIdOrCode)
+            return undefined;
+        const clean = roomIdOrCode.trim();
+        let room = this.rooms.get(clean) || this.rooms.get(clean.toLowerCase()) || this.rooms.get(clean.toUpperCase());
         if (!room) {
-            // Try finding by room code or case-insensitive search
-            room = this.getRoomByCode(roomId);
+            const upper = clean.toUpperCase();
+            for (const r of this.rooms.values()) {
+                if ((r.code && r.code.toUpperCase() === upper) || (r.id && r.id.toUpperCase() === upper)) {
+                    return r;
+                }
+            }
         }
+        return room;
+    }
+    getRoom(roomId) {
+        const room = this.getRawRoom(roomId);
         if (!room)
             return undefined;
         // Calculate elapsed playback position
@@ -27,13 +37,7 @@ export class RoomManager {
         };
     }
     getRoomByCode(code) {
-        const cleanCode = code.trim().toUpperCase();
-        for (const r of this.rooms.values()) {
-            if (r.code.toUpperCase() === cleanCode || r.id.toUpperCase() === cleanCode) {
-                return r;
-            }
-        }
-        return undefined;
+        return this.getRoom(code);
     }
     getAllRooms() {
         return Array.from(this.rooms.values()).map(r => ({
@@ -76,21 +80,42 @@ export class RoomManager {
         return 'MX7K2P';
     }
     createRoom(params) {
-        const slug = params.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+        if (params.code) {
+            const existing = this.getRawRoom(params.code);
+            if (existing) {
+                if (params.initialSong && !existing.currentSong) {
+                    existing.currentSong = params.initialSong;
+                    existing.isPlaying = true;
+                    existing.positionMs = 0;
+                    existing.serverTimestamp = Date.now();
+                }
+                return existing;
+            }
+        }
         const code = params.code ? params.code.toUpperCase() : this.generateUniqueCode(this.rooms.values());
-        const roomId = `room-${slug || 'vibe'}-${code.toLowerCase()}`;
+        const roomId = `room-${code.toLowerCase()}`;
+        const hostUser = params.hostUser || {
+            id: `usr-${Date.now()}`,
+            name: 'Host',
+            handle: '@host',
+            avatarUrl: '',
+            status: 'online',
+            streakDays: 1,
+            totalListeningHours: 0,
+            totalPlays: 0,
+        };
         const newRoom = {
             id: roomId,
             code,
-            title: params.title || 'VIBE ROOM',
+            title: params.title || `ROOM ${code}`,
             mode: params.mode || 'private',
             controlMode: params.controlMode || 'everyone',
-            hostId: params.hostUser.id,
+            hostId: hostUser.id,
             currentSong: params.initialSong || null,
             isPlaying: !!params.initialSong,
             positionMs: 0,
             serverTimestamp: Date.now(),
-            members: [],
+            members: [{ socketId: '', user: hostUser, joinedAt: Date.now() }],
             queue: params.initialSong ? [params.initialSong] : [],
             messages: [],
             reactions: [],
@@ -101,29 +126,29 @@ export class RoomManager {
         return newRoom;
     }
     joinRoom(roomIdOrCode, socketId, user) {
-        let room = this.rooms.get(roomIdOrCode);
+        let room = this.getRawRoom(roomIdOrCode);
         if (!room) {
-            room = this.getRoomByCode(roomIdOrCode);
-        }
-        if (!room) {
-            // If room doesn't exist, auto-create private room with this code/title
+            const clean = roomIdOrCode.trim();
+            const isCode = /^[A-Z0-9]{3,8}$/i.test(clean);
+            const code = isCode ? clean.toUpperCase() : undefined;
             room = this.createRoom({
-                title: roomIdOrCode.startsWith('room-') ? 'LISTEN TOGETHER' : `ROOM ${roomIdOrCode}`,
+                title: code ? `ROOM ${code}` : 'LISTEN TOGETHER',
                 hostUser: user,
                 mode: 'private',
+                code,
             });
         }
         // Leave any previous room
         this.leaveRoom(socketId);
-        // Remove existing member entry if user reconnected with new socketId
-        room.members = room.members.filter(m => m.user.id !== user.id);
+        // Remove existing member entry if user reconnected with new socketId or user id matches
+        room.members = room.members.filter(m => m.user.id !== user.id && m.socketId !== socketId);
         const member = {
             socketId,
             user,
             joinedAt: Date.now(),
         };
         room.members.push(member);
-        room.listenerCount = Math.max(room.listenerCount, room.members.length);
+        room.listenerCount = room.members.length;
         this.socketToRoom.set(socketId, room.id);
         return {
             room: {
@@ -138,7 +163,7 @@ export class RoomManager {
         const roomId = this.socketToRoom.get(socketId);
         if (!roomId)
             return null;
-        const room = this.rooms.get(roomId);
+        const room = this.getRawRoom(roomId);
         this.socketToRoom.delete(socketId);
         if (!room)
             return null;
@@ -148,14 +173,15 @@ export class RoomManager {
             departedUser = room.members[memberIndex].user;
             room.members.splice(memberIndex, 1);
         }
+        room.listenerCount = Math.max(1, room.members.length);
         // If host left and members remain, assign next host
         if (departedUser && departedUser.id === room.hostId && room.members.length > 0) {
             room.hostId = room.members[0].user.id;
         }
-        return { roomId, room, user: departedUser };
+        return { roomId: room.id, room, user: departedUser };
     }
     play(roomId, userId, positionMs) {
-        const room = this.rooms.get(roomId);
+        const room = this.getRawRoom(roomId);
         if (!room)
             return null;
         if (room.controlMode === 'host_only' && room.hostId !== userId) {
@@ -169,7 +195,7 @@ export class RoomManager {
         return room;
     }
     pause(roomId, userId, positionMs) {
-        const room = this.rooms.get(roomId);
+        const room = this.getRawRoom(roomId);
         if (!room)
             return null;
         if (room.controlMode === 'host_only' && room.hostId !== userId) {
@@ -181,7 +207,7 @@ export class RoomManager {
         return room;
     }
     seek(roomId, userId, positionMs) {
-        const room = this.rooms.get(roomId);
+        const room = this.getRawRoom(roomId);
         if (!room)
             return null;
         if (room.controlMode === 'host_only' && room.hostId !== userId) {
@@ -192,7 +218,7 @@ export class RoomManager {
         return room;
     }
     changeSong(roomId, userId, song) {
-        const room = this.rooms.get(roomId);
+        const room = this.getRawRoom(roomId);
         if (!room)
             return null;
         if (room.controlMode === 'host_only' && room.hostId !== userId) {
@@ -205,7 +231,7 @@ export class RoomManager {
         return room;
     }
     addMessage(roomId, user, text, gifUrl) {
-        const room = this.rooms.get(roomId);
+        const room = this.getRawRoom(roomId);
         if (!room)
             return null;
         const message = {
@@ -224,7 +250,7 @@ export class RoomManager {
         return message;
     }
     addReaction(roomId, user, emoji, positionMs) {
-        const room = this.rooms.get(roomId);
+        const room = this.getRawRoom(roomId);
         if (!room)
             return null;
         const reaction = {
